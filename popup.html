@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Media Controller</title>
+    <style>
+        :root {
+            /* Dark Theme (Default) */
+            --bg-color: #1e1e2e;
+            --text-color: #cdd6f4;
+            --section-bg: #313244;
+            --border-color: #45475a;
+            --primary-color: #89b4fa;
+            --btn-bg: #45475a;
+            --btn-text: #cdd6f4;
+            --btn-hover: #585b70;
+            --header-color: #b4befe;
+        }
+
+        [data-theme="light"] {
+            /* Light Theme */
+            --bg-color: #f4f5f7;
+            --text-color: #17171d;
+            --section-bg: #ffffff;
+            --border-color: #d1d5db;
+            --primary-color: #2563eb;
+            --btn-bg: #e5e7eb;
+            --btn-text: #374151;
+            --btn-hover: #d1d5db;
+            --header-color: #1f2937;
+        }
+
+        body {
+            width: 330px;
+            padding: 20px;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            border-radius: 8px;
+            transition: background-color 0.3s, color 0.3s;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        h2 {
+            margin: 0;
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--header-color);
+        }
+
+        .theme-toggle {
+            cursor: pointer;
+            background: none;
+            border: none;
+            color: var(--text-color);
+            font-size: 18px;
+            padding: 4px;
+            transition: opacity 0.2s;
+        }
+
+        .theme-toggle:hover {
+            opacity: 0.7;
+        }
+
+        .section {
+            margin-bottom: 20px;
+            padding: 15px;
+            background-color: var(--section-bg);
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            transition: background-color 0.3s, border-color 0.3s;
+        }
+
+        .section-title {
+            font-size: 14px;
+            margin-bottom: 12px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .slider-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        input[type="range"] {
+            flex: 1;
+            cursor: pointer;
+            accent-color: var(--primary-color);
+        }
+
+        .value-display {
+            font-size: 15px;
+            font-weight: bold;
+            color: var(--primary-color);
+            min-width: 50px;
+            text-align: right;
+        }
+
+        .controls {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .btn-action {
+            background-color: var(--btn-bg);
+            color: var(--btn-text);
+            border: none;
+            padding: 6px 14px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.2s, color 0.2s;
+            font-weight: 600;
+            font-size: 12px;
+        }
+
+        .btn-action:hover {
+            background-color: var(--btn-hover);
+        }
+    </style>
+</head>
+
+<body>
+    <div class="header">
+        <h2>Media Controller</h2>
+        <button id="themeToggle" class="theme-toggle" title="Toggle Theme">🌓</button>
+    </div>
+
+    <div class="section">
+        <div class="section-title">🔊 Volume Boost</div>
+        <div class="slider-wrapper">
+            <span>0%</span>
+            <input type="range" id="volumeSlider" min="0" max="500" value="100">
+            <div class="value-display" id="volumeValue">100%</div>
+        </div>
+        <div class="controls">
+            <button class="btn-action" id="btnVolReset">Reset (100%)</button>
+            <button class="btn-action" id="btnVolMute">Mute (0%)</button>
+        </div>
+    </div>
+
+    <div class="section">
+        <div class="section-title">⏩ Playback Speed</div>
+        <div class="slider-wrapper">
+            <span>0.1x</span>
+            <input type="range" id="speedSlider" min="1" max="160" value="10">
+            <div class="value-display" id="speedValue">1.0x</div>
+        </div>
+        <div class="controls">
+            <button class="btn-action" id="btnSpeedReset">Normal (1.0x)</button>
+            <button class="btn-action" id="btnSpeedFast">Fast (2.0x)</button>
+        </div>
+    </div>
+
+    <script src="popup.js"></script>
+</body>
+
+</html>
