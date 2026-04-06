@@ -1,29 +1,38 @@
-#  Media Controller
+# Media Controller
 
-**Media Controller** is a Chrome extension that gives you independent, per-tab control over both **Volume** (up to 500% boost) and **Video/Audio Playback Speed** (up to 16x).
+A Chrome extension for controlling volume and playback speed on a per-tab basis. Useful when you want to boost audio beyond what the browser normally allows, or speed through long videos without digging into site-specific settings.
 
----
+## What it does
 
-##  Key Features
-*   **Per-Tab Sovereignty**: Independent volume and speed management for each open tab.
-*   **5X Volume Boost**: Amplify your audio up to 500% beyond system defaults.
-*   **16X Speed Control**: Adjust playback speed smoothly from **0.1x** up to **16.0x**.
-*   **Light/Dark Theme**: Toggle between elegant dark and minimal light themes effortlessly.
-*   **Stateless Operation**: Settings are managed cleanly for each tab and reset upon closure.
+- **Volume boost up to 500%** — Goes way past the default limit using the Web Audio API.
+- **Speed control from 0.1x to 16x** — Fine-grained slider, not just the usual 0.5x/1x/2x presets.
+- **Per-tab settings** — Each tab keeps its own volume and speed. Changing one tab won't affect another.
+- **On-video overlay** — A small floating badge appears on the corner of video players. Click it to adjust speed and volume right there, without opening the extension popup.
+- **Light and dark theme** — Toggle from the popup header. Preference is saved.
+- **Cleans up after itself** — When you close a tab, its stored settings are removed automatically.
 
----
+## Installation
 
-##  Installation Guide
-1.  Launch your Chromium browser (**Chrome**, **Edge**, or **Brave**).
-2.  Navigate to `chrome://extensions/` in your address bar.
-3.  Toggle **Developer mode** (located in the top-right corner) to **ON**.
-4.  Click the **Load unpacked** button.
-5.  Select this exact folder on your computer.
-6.  The extension is now initialized!
+1. Open a Chromium-based browser (Chrome, Edge, Brave, etc.).
+2. Go to `chrome://extensions/`.
+3. Turn on **Developer mode** in the top-right corner.
+4. Click **Load unpacked** and select this folder.
+5. Done. The extension icon should appear in your toolbar.
 
----
+## How to use
 
-##  Usage Instructions
-*   **Pin the Extension**: Pin the icon to your toolbar for fast access.
-*   **Adjust on the Fly**: Click the extension icon on any media tab to tweak audio loudness or video speed dynamically.
-*   **Switch Themes**: Click the 🌓 icon located at the top of the popup to switch between light and dark themes at any time.
+**From the popup:**
+Click the extension icon on any tab that has audio or video. You'll get sliders for volume and speed, plus a few preset buttons.
+
+**From the video overlay:**
+When you hover over a video, a small badge shows the current speed and volume in the top-left corner. Click it to expand a mini control panel with sliders and quick-access buttons — no need to open the popup at all.
+
+**Theme switching:**
+There's a toggle button at the top of the popup to switch between dark and light mode.
+
+## Technical notes
+
+- Volume boost works through the Web Audio API (`GainNode`), so it can push past 100% without distortion on most content.
+- The content script uses Shadow DOM for the overlay widget, so it won't clash with any site's existing styles.
+- A `MutationObserver` watches for dynamically added media elements (common on SPAs like YouTube, Bilibili, Instagram reels, etc.), so the extension picks up new videos automatically as you scroll.
+- Cross-origin media elements are handled gracefully — if the Audio API can't connect, it falls back silently.
