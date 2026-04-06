@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Media Controller</title>
+    <link rel="stylesheet" href="popup.css">
+</head>
+
+<body>
+    <div class="header">
+        <h2>Media Controls</h2>
+        <label class="theme-switch" title="Toggle Dark/Light Mode">
+            <input type="checkbox" id="themeToggle" checked>
+            <span class="switch-slider"></span>
+        </label>
+    </div>
+
+    <div class="section">
+        <div class="section-header">
+            <div class="section-title">🔊 Volume</div>
+            <div class="value-display" id="volumeValue">100%</div>
+        </div>
+        <div class="slider-wrapper">
+            <input type="range" id="volumeSlider" min="0" max="500" value="100">
+        </div>
+        <div class="controls">
+            <button class="btn-action" id="btnVolReset">Reset</button>
+            <button class="btn-action" id="btnVolMute">Mute</button>
+        </div>
+    </div>
+
+    <div class="section">
+        <div class="section-header">
+            <div class="section-title">⏩ Speed</div>
+            <div class="value-display" id="speedValue">1.0x</div>
+        </div>
+        <div class="slider-wrapper">
+            <input type="range" id="speedSlider" min="1" max="160" value="10">
+        </div>
+        <div class="controls">
+            <button class="btn-action" id="btnSpeedReset">Normal</button>
+            <button class="btn-action" id="btnSpeedFast">2.0x</button>
+        </div>
+    </div>
+
+    <script src="popup.js"></script>
+</body>
+
+</html>

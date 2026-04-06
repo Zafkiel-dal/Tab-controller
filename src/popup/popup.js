@@ -51,7 +51,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // First time script injection fallback
             chrome.scripting.executeScript({
                 target: { tabId: tabId, allFrames: true },
-                files: ['content.js']
+                files: ['src/content/content.js']
             }).then(() => {
                 chrome.tabs.sendMessage(tabId, {
                     action: action,

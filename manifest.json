@@ -13,19 +13,19 @@
     "<all_urls>"
   ],
   "action": {
-    "default_popup": "popup.html",
+    "default_popup": "src/popup/popup.html",
     "default_title": "Media Control",
     "default_icon": {
-      "16": "icon_16.png",
-      "48": "icon_48.png"
+      "16": "assets/icons/icon_16.png",
+      "48": "assets/icons/icon_48.png"
     }
   },
   "icons": {
-    "16": "icon_16.png",
-    "48": "icon_48.png"
+    "16": "assets/icons/icon_16.png",
+    "48": "assets/icons/icon_48.png"
   },
   "background": {
-    "service_worker": "background.js"
+    "service_worker": "src/background/background.js"
   },
   "content_scripts": [
     {
@@ -33,7 +33,7 @@
         "<all_urls>"
       ],
       "js": [
-        "content.js"
+        "src/content/content.js"
       ],
       "all_frames": true,
       "run_at": "document_end"
