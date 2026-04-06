@@ -40,6 +40,7 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
     });
 
     // ── Overlay Widget ──────────────────────────────────────────────────
+
     function buildOverlayStyles() {
         return `
             :host {
@@ -56,384 +57,552 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
                 left: 8px;
                 display: flex;
                 align-items: center;
-                gap: 6px;
+                gap: 0;
                 background: rgba(15, 15, 20, 0.82);
                 backdrop-filter: blur(12px);
                 -webkit-backdrop-filter: blur(12px);
-                border: 1px solid rgba(255, 255, 255, 0.1);
-                border-radius: 10px;
-                padding: 5px 10px;
-                cursor: pointer;
+                border: 1px solid rgba(255, 255, 255, 0.08);
+                border-radius: 8px;
+                padding: 0;
                 user-select: none;
-                transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-                box-shadow: 0 2px 12px rgba(0,0,0,0.4);
-                opacity: 0;
-                transform: translateY(-4px);
+                box-shadow: 0 2px 10px rgba(0,0,0,0.35);
+                opacity: var(--mc-idle-opacity, 0.45);
+                transition: opacity 0.2s ease;
                 pointer-events: auto;
-            }
-
-            :host(:hover) .mc-badge,
-            .mc-badge.mc-visible {
-                opacity: 1;
-                transform: translateY(0);
             }
 
             .mc-badge:hover {
-                background: rgba(15, 15, 20, 0.92);
-                border-color: rgba(137, 180, 250, 0.3);
-                box-shadow: 0 4px 20px rgba(0,0,0,0.5), 0 0 0 1px rgba(137, 180, 250, 0.15);
+                opacity: 1 !important;
             }
 
-            .mc-chip {
+            /* ── Chip (each half of the badge) ── */
+            .mc-zone {
+                position: relative;
                 display: flex;
                 align-items: center;
-                gap: 3px;
-                font-size: 11px;
-                font-weight: 600;
-                color: #cdd6f4;
-                letter-spacing: 0.02em;
+                padding: 4px 8px;
+                cursor: default;
+            }
+
+            .mc-zone::after {
+                content: '';
+                position: absolute;
+                bottom: -10px;
+                left: 0;
+                right: 0;
+                height: 10px;
+            }
+
+            .mc-zone-speed {
+                border-radius: 8px 0 0 8px;
+            }
+            .mc-zone-speed:hover {
+                background: rgba(166, 227, 161, 0.08);
+            }
+
+            .mc-zone-vol {
+                border-radius: 0;
+            }
+            .mc-zone-vol:hover {
+                background: rgba(137, 180, 250, 0.08);
+            }
+
+            .mc-sep {
+                width: 1px;
+                height: 16px;
+                background: rgba(255, 255, 255, 0.1);
+                flex-shrink: 0;
+            }
+
+            .mc-badge.mc-dragging {
+                cursor: grabbing !important;
+                opacity: 1 !important;
+                transition: none !important;
+            }
+
+            /* ── Opacity Slider (Eye Zone) ── */
+            .mc-zone-eye {
+                border-radius: 0;
+                color: rgba(205, 214, 244, 0.5);
+                border-left: 1px solid rgba(255, 255, 255, 0.06);
+            }
+            .mc-zone-eye:hover {
+                background: rgba(255, 255, 255, 0.08);
+                color: rgba(205, 214, 244, 0.9);
+            }
+
+            /* ── Reset Zone ── */
+            .mc-zone-reset {
+                border-radius: 0 8px 8px 0;
+                color: rgba(205, 214, 244, 0.4);
+                border-left: 1px solid rgba(255, 255, 255, 0.06);
+                cursor: pointer;
+            }
+            .mc-zone-reset:hover {
+                background: rgba(243, 139, 168, 0.08); /* slight red tint on hover */
+                color: #f38ba8;
+            }
+
+            .mc-eye-pop {
+                position: absolute;
+                top: 100%;
+                left: 50%;
+                transform: translateX(-50%) translateY(4px) scale(0.95);
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                background: rgba(15, 15, 20, 0.92);
+                backdrop-filter: blur(14px);
+                -webkit-backdrop-filter: blur(14px);
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                border-radius: 7px;
+                padding: 5px 10px;
+                opacity: 0;
+                pointer-events: none;
+                transition: opacity 0.15s ease, transform 0.15s ease;
+                box-shadow: 0 4px 16px rgba(0,0,0,0.4);
                 white-space: nowrap;
             }
 
-            .mc-chip-icon {
-                font-size: 12px;
-                line-height: 1;
-            }
-
-            .mc-divider {
-                width: 1px;
-                height: 14px;
-                background: rgba(255, 255, 255, 0.15);
-                flex-shrink: 0;
-            }
-
-            /* ── Expanded Panel ── */
-            .mc-panel {
-                position: absolute;
-                top: 8px;
-                left: 8px;
-                background: rgba(15, 15, 20, 0.92);
-                backdrop-filter: blur(16px);
-                -webkit-backdrop-filter: blur(16px);
-                border: 1px solid rgba(255, 255, 255, 0.1);
-                border-radius: 14px;
-                padding: 14px 16px;
-                min-width: 220px;
-                box-shadow: 0 8px 32px rgba(0,0,0,0.55), 0 0 0 1px rgba(137, 180, 250, 0.1);
-                opacity: 0;
-                transform: scale(0.92) translateY(-6px);
-                transform-origin: top left;
-                pointer-events: none;
-                transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-                display: flex;
-                flex-direction: column;
-                gap: 12px;
-            }
-
-            .mc-panel.mc-open {
+            .mc-zone-eye:hover .mc-eye-pop {
                 opacity: 1;
-                transform: scale(1) translateY(0);
                 pointer-events: auto;
+                transform: translateX(-50%) translateY(4px) scale(1);
             }
 
-            .mc-panel-row {
-                display: flex;
-                align-items: center;
-                gap: 8px;
-            }
-
-            .mc-panel-label {
+            .mc-label {
                 font-size: 11px;
                 font-weight: 600;
-                color: rgba(205, 214, 244, 0.7);
-                min-width: 18px;
-                text-align: center;
-                flex-shrink: 0;
+                color: rgba(205, 214, 244, 0.85);
+                white-space: nowrap;
+                letter-spacing: 0.01em;
             }
 
-            .mc-panel-value {
-                font-size: 12px;
+            .mc-speed-val { color: #a6e3a1; }
+            .mc-vol-val   { color: #89b4fa; }
+
+            /* ── Speed popover (3 buttons) ── */
+            .mc-spd-pop {
+                position: absolute;
+                top: 100%;
+                left: 50%;
+                transform: translateX(-50%) translateY(4px) scale(0.95);
+                display: flex;
+                align-items: center;
+                gap: 2px;
+                background: rgba(15, 15, 20, 0.92);
+                backdrop-filter: blur(14px);
+                -webkit-backdrop-filter: blur(14px);
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                border-radius: 7px;
+                padding: 3px 4px;
+                opacity: 0;
+                pointer-events: none;
+                transition: opacity 0.15s ease, transform 0.15s ease;
+                box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+            }
+
+
+            .mc-zone-speed:hover .mc-spd-pop {
+                opacity: 1;
+                pointer-events: auto;
+                transform: translateX(-50%) translateY(4px) scale(1);
+            }
+
+            .mc-sbtn {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                width: auto;
+                height: 22px;
+                border: none;
+                border-radius: 4px;
+                background: transparent;
+                color: rgba(205, 214, 244, 0.8);
+                font-size: 13px;
                 font-weight: 700;
-                color: #89b4fa;
-                min-width: 42px;
-                text-align: right;
-                font-variant-numeric: tabular-nums;
-                flex-shrink: 0;
-            }
-
-            /* ── Custom Slider ── */
-            .mc-slider {
-                -webkit-appearance: none;
-                appearance: none;
-                flex: 1;
-                height: 4px;
-                border-radius: 2px;
-                background: rgba(255, 255, 255, 0.1);
-                outline: none;
                 cursor: pointer;
-                transition: height 0.15s;
+                transition: background 0.12s, color 0.12s;
+                padding: 0 5px;
+                line-height: 1;
+                font-family: inherit;
             }
 
-            .mc-slider:hover {
-                height: 6px;
-            }
-
-            .mc-slider::-webkit-slider-thumb {
-                -webkit-appearance: none;
-                appearance: none;
-                width: 14px;
-                height: 14px;
-                border-radius: 50%;
-                background: #89b4fa;
-                border: 2px solid rgba(255, 255, 255, 0.2);
-                cursor: pointer;
-                box-shadow: 0 1px 6px rgba(0,0,0,0.3);
-                transition: transform 0.15s, box-shadow 0.15s;
-            }
-
-            .mc-slider::-webkit-slider-thumb:hover {
-                transform: scale(1.2);
-                box-shadow: 0 0 10px rgba(137, 180, 250, 0.5);
-            }
-
-            .mc-slider::-moz-range-thumb {
-                width: 14px;
-                height: 14px;
-                border-radius: 50%;
-                background: #89b4fa;
-                border: 2px solid rgba(255, 255, 255, 0.2);
-                cursor: pointer;
-            }
-
-            /* Speed slider accent */
-            .mc-slider-speed::-webkit-slider-thumb {
-                background: #a6e3a1;
-            }
-            .mc-slider-speed::-moz-range-thumb {
-                background: #a6e3a1;
-            }
-
-            .mc-panel-value.mc-speed-val {
+            .mc-sbtn:hover {
+                background: rgba(166, 227, 161, 0.18);
                 color: #a6e3a1;
             }
 
-            /* ── Quick Buttons ── */
-            .mc-quick-btns {
-                display: flex;
-                gap: 4px;
-                flex-wrap: wrap;
-                justify-content: center;
-                padding-top: 4px;
-                border-top: 1px solid rgba(255,255,255,0.06);
+            .mc-sbtn-rst {
+                font-size: 10px;
+                width: auto;
+                padding: 0 6px;
+                color: rgba(205, 214, 244, 0.55);
+                font-weight: 600;
+            }
+            .mc-sbtn-rst:hover {
+                color: #a6e3a1;
             }
 
-            .mc-qbtn {
-                font-size: 10px;
-                font-weight: 600;
-                color: #cdd6f4;
-                background: rgba(255,255,255,0.06);
-                border: 1px solid rgba(255,255,255,0.08);
-                border-radius: 6px;
-                padding: 3px 8px;
-                cursor: pointer;
-                transition: all 0.15s;
+            /* ── Volume popover (slider) ── */
+            .mc-vol-pop {
+                position: absolute;
+                top: 100%;
+                left: 50%;
+                transform: translateX(-50%) translateY(4px) scale(0.95);
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                background: rgba(15, 15, 20, 0.92);
+                backdrop-filter: blur(14px);
+                -webkit-backdrop-filter: blur(14px);
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                border-radius: 7px;
+                padding: 5px 10px;
+                opacity: 0;
+                pointer-events: none;
+                transition: opacity 0.15s ease, transform 0.15s ease;
+                box-shadow: 0 4px 16px rgba(0,0,0,0.4);
                 white-space: nowrap;
             }
 
-            .mc-qbtn:hover {
-                background: rgba(137, 180, 250, 0.15);
-                border-color: rgba(137, 180, 250, 0.3);
+
+            .mc-zone-vol:hover .mc-vol-pop {
+                opacity: 1;
+                pointer-events: auto;
+                transform: translateX(-50%) translateY(4px) scale(1);
+            }
+
+            .mc-vslider {
+                -webkit-appearance: none;
+                appearance: none;
+                width: 90px;
+                height: 3px;
+                border-radius: 2px;
+                background: rgba(255, 255, 255, 0.12);
+                outline: none;
+                cursor: pointer;
+            }
+
+            .mc-vslider::-webkit-slider-thumb {
+                -webkit-appearance: none;
+                appearance: none;
+                width: 12px;
+                height: 12px;
+                border-radius: 50%;
+                background: #89b4fa;
+                border: 1.5px solid rgba(255, 255, 255, 0.15);
+                cursor: pointer;
+                box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+                transition: transform 0.12s;
+            }
+            .mc-vslider::-webkit-slider-thumb:hover {
+                transform: scale(1.15);
+            }
+
+            .mc-vslider::-moz-range-thumb {
+                width: 12px;
+                height: 12px;
+                border-radius: 50%;
+                background: #89b4fa;
+                border: 1.5px solid rgba(255, 255, 255, 0.15);
+                cursor: pointer;
+            }
+
+            .mc-vpct {
+                font-size: 10px;
+                font-weight: 700;
                 color: #89b4fa;
+                min-width: 32px;
+                text-align: right;
+                font-variant-numeric: tabular-nums;
             }
         `;
+    }
+
+    // ── Helper ──────────────────────────────────────────────────────────
+    function createEl(tag, className, text = '', props = {}) {
+        const el = document.createElement(tag);
+        if (className) el.className = className;
+        if (text) el.textContent = text;
+        Object.assign(el, props);
+        return el;
     }
 
     function createOverlayForVideo(video) {
         if (state.overlays.has(video)) return;
 
-        // Create a host element
-        const host = document.createElement('div');
-        host.className = '__mc-overlay-host';
+        const host = createEl('div', '__mc-overlay-host');
         host.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:2147483647;';
 
         const shadow = host.attachShadow({ mode: 'closed' });
-
-        // Styles
-        const styleEl = document.createElement('style');
-        styleEl.textContent = buildOverlayStyles();
+        const styleEl = createEl('style', '', buildOverlayStyles());
         shadow.appendChild(styleEl);
 
-        // Badge (collapsed state)
-        const badge = document.createElement('div');
-        badge.className = 'mc-badge';
+        // ── Badge ──
+        const badge = createEl('div', 'mc-badge');
 
-        const speedChip = document.createElement('span');
-        speedChip.className = 'mc-chip';
-        speedChip.innerHTML = '<span class="mc-chip-icon">⚡</span><span class="mc-chip-speed-val">1.0x</span>';
+        // Speed zone
+        const speedZone = createEl('div', 'mc-zone mc-zone-speed');
+        const speedFormatted = Number.isInteger(state.currentSpeed) ? state.currentSpeed.toFixed(1) : state.currentSpeed.toString();
+        const speedLabel = createEl('span', 'mc-label mc-speed-val', speedFormatted + 'x');
 
-        const divider = document.createElement('span');
-        divider.className = 'mc-divider';
+        // Speed popover: − | 1× | +
+        const spdPop = createEl('div', 'mc-spd-pop');
+        const btnMinus = createEl('button', 'mc-sbtn', '\u2212');
+        const btnReset = createEl('button', 'mc-sbtn mc-sbtn-rst', '1\u00d7');
+        const btnPlus = createEl('button', 'mc-sbtn', '+');
 
-        const volChip = document.createElement('span');
-        volChip.className = 'mc-chip';
-        volChip.innerHTML = '<span class="mc-chip-icon">🔊</span><span class="mc-chip-vol-val">100%</span>';
+        spdPop.append(btnMinus, btnReset, btnPlus);
+        speedZone.append(speedLabel, spdPop);
 
-        badge.appendChild(speedChip);
-        badge.appendChild(divider);
-        badge.appendChild(volChip);
+        // Separator
+        const sep = createEl('div', 'mc-sep');
+
+        // Volume zone
+        const volZone = createEl('div', 'mc-zone mc-zone-vol');
+        const volPercentStr = Math.round(state.currentVolume * 100) + '%';
+        const volLabel = createEl('span', 'mc-label mc-vol-val', volPercentStr);
+
+        // Volume popover: slider + percentage
+        const volPop = createEl('div', 'mc-vol-pop');
+        const volSlider = createEl('input', 'mc-vslider', '', {
+            type: 'range', min: '0', max: '500', step: '1',
+            value: String(Math.round(state.currentVolume * 100))
+        });
+        const volPct = createEl('span', 'mc-vpct', volPercentStr);
+
+        volPop.append(volSlider, volPct);
+        volZone.append(volLabel, volPop);
+
+        // ── Opacity Zone ──
+        const eyeZone = createEl('div', 'mc-zone mc-zone-eye');
+        const eyeIcon = createEl('span', 'mc-label');
+        eyeIcon.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg>`; // SVG eye icon
+
+        const eyePop = createEl('div', 'mc-eye-pop');
+        const eyeSlider = createEl('input', 'mc-vslider', '', {
+            type: 'range', min: '20', max: '100', step: '5', value: '45'
+        });
+        const eyePct = createEl('span', 'mc-vpct', '45%');
+
+        eyePop.append(eyeSlider, eyePct);
+        eyeZone.append(eyeIcon, eyePop);
+
+        // ── Reset Zone ──
+        const resetZone = createEl('div', 'mc-zone mc-zone-reset');
+        resetZone.title = "Reset (1.0x Speed, 100% Volume)";
+        resetZone.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>`; // SVG reset icon
+        resetZone.addEventListener('click', (e) => {
+            e.stopPropagation();
+            state.currentSpeed = 1.0;
+            state.currentVolume = 1.0;
+            applySpeed();
+            applyVolume();
+            persistState();
+            syncDisplay();
+        });
+
+        eyeSlider.addEventListener('input', (e) => {
+            e.stopPropagation();
+            const val = e.target.value;
+            eyePct.textContent = val + '%';
+            badge.style.setProperty('--mc-idle-opacity', val / 100);
+        });
+
+        // Capture pointer on slider thumb to prevent video player interaction
+        eyeSlider.addEventListener('pointerdown', (e) => {
+            e.stopPropagation();
+            e.stopImmediatePropagation();
+            eyeSlider.setPointerCapture(e.pointerId);
+        });
+        eyeSlider.addEventListener('pointermove', (e) => {
+            e.stopPropagation();
+            e.stopImmediatePropagation();
+        });
+        eyeSlider.addEventListener('pointerup', (e) => {
+            e.stopPropagation();
+            e.stopImmediatePropagation();
+        });
+
+        eyeZone.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const step = e.deltaY < 0 ? 5 : -5;
+            let next = parseInt(eyeSlider.value, 10) + step;
+            next = Math.max(20, Math.min(100, next));
+            eyeSlider.value = next;
+            eyePct.textContent = next + '%';
+            badge.style.setProperty('--mc-idle-opacity', next / 100);
+        }, { passive: false });
+
+        badge.appendChild(speedZone);
+        badge.appendChild(sep);
+        badge.appendChild(volZone);
+        badge.appendChild(eyeZone);
+        badge.appendChild(resetZone);
         shadow.appendChild(badge);
 
-        // Panel (expanded state)
-        const panel = document.createElement('div');
-        panel.className = 'mc-panel';
-        panel.innerHTML = `
-            <div class="mc-panel-row">
-                <span class="mc-panel-label">🔊</span>
-                <input type="range" class="mc-slider mc-slider-vol" min="0" max="500" value="${Math.round(state.currentVolume * 100)}" step="1">
-                <span class="mc-panel-value mc-vol-val">${Math.round(state.currentVolume * 100)}%</span>
-            </div>
-            <div class="mc-panel-row">
-                <span class="mc-panel-label">⚡</span>
-                <input type="range" class="mc-slider mc-slider-speed" min="1" max="160" value="${Math.round(state.currentSpeed * 10)}" step="1">
-                <span class="mc-panel-value mc-speed-val">${state.currentSpeed.toFixed(1)}x</span>
-            </div>
-            <div class="mc-quick-btns">
-                <button class="mc-qbtn" data-action="vol" data-val="100">100%</button>
-                <button class="mc-qbtn" data-action="vol" data-val="200">200%</button>
-                <button class="mc-qbtn" data-action="vol" data-val="0">Mute</button>
-                <button class="mc-qbtn" data-action="speed" data-val="10">1x</button>
-                <button class="mc-qbtn" data-action="speed" data-val="15">1.5x</button>
-                <button class="mc-qbtn" data-action="speed" data-val="20">2x</button>
-            </div>
-        `;
-        shadow.appendChild(panel);
-
-        // References within shadow DOM
-        const volSlider = panel.querySelector('.mc-slider-vol');
-        const speedSlider = panel.querySelector('.mc-slider-speed');
-        const volValLabel = panel.querySelector('.mc-vol-val');
-        const speedValLabel = panel.querySelector('.mc-speed-val');
-        const chipSpeedVal = speedChip.querySelector('.mc-chip-speed-val');
-        const chipVolVal = volChip.querySelector('.mc-chip-vol-val');
-
-        // Update display values
+        // ── Sync helper ──
         function syncDisplay() {
             const volPercent = Math.round(state.currentVolume * 100);
-            const speedFixed = state.currentSpeed.toFixed(1);
+            const speedFormatted = Number.isInteger(state.currentSpeed) ? state.currentSpeed.toFixed(1) : state.currentSpeed.toString();
 
-            chipSpeedVal.textContent = speedFixed + 'x';
-            chipVolVal.textContent = volPercent + '%';
+            speedLabel.textContent = speedFormatted + 'x';
+            volLabel.textContent = volPercent + '%';
             volSlider.value = volPercent;
-            speedSlider.value = Math.round(state.currentSpeed * 10);
-            volValLabel.textContent = volPercent + '%';
-            speedValLabel.textContent = speedFixed + 'x';
+            volPct.textContent = volPercent + '%';
         }
 
-        // Show panel, hide badge
-        let panelOpen = false;
-        let hideTimeout = null;
+        // ── Speed buttons ──
+        const SPEED_PRESETS = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
 
-        function openPanel() {
-            if (hideTimeout) { clearTimeout(hideTimeout); hideTimeout = null; }
+        function stepSpeed(direction) {
+            let curr = state.currentSpeed;
+            let closestIdx = 0;
+            let minDiff = Infinity;
+            SPEED_PRESETS.forEach((v, i) => {
+                const diff = Math.abs(v - curr);
+                if (diff < minDiff) {
+                    minDiff = diff;
+                    closestIdx = i;
+                }
+            });
+            let nextIdx = Math.max(0, Math.min(SPEED_PRESETS.length - 1, closestIdx + direction));
+            state.currentSpeed = SPEED_PRESETS[nextIdx];
+            applySpeed();
+            persistState();
             syncDisplay();
-            badge.style.pointerEvents = 'none';
-            badge.style.opacity = '0';
-            panel.classList.add('mc-open');
-            panelOpen = true;
         }
 
-        function closePanel() {
-            panel.classList.remove('mc-open');
-            badge.style.pointerEvents = '';
-            badge.style.opacity = '';
-            panelOpen = false;
-        }
-
-        badge.addEventListener('click', (e) => {
+        btnMinus.addEventListener('click', (e) => { e.stopPropagation(); stepSpeed(-1); });
+        btnPlus.addEventListener('click', (e) => { e.stopPropagation(); stepSpeed(1); });
+        btnReset.addEventListener('click', (e) => {
             e.stopPropagation();
-            openPanel();
+            state.currentSpeed = 1.0;
+            applySpeed();
+            persistState();
+            syncDisplay();
         });
 
-        // Close when mouse leaves the entire host area
-        host.addEventListener('mouseleave', () => {
-            if (panelOpen) {
-                hideTimeout = setTimeout(() => closePanel(), 350);
-            }
-        });
+        // ── Scroll wheel on speed zone ──
+        speedZone.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const direction = e.deltaY < 0 ? 1 : -1; // scroll up = faster
+            stepSpeed(direction);
+        }, { passive: false });
 
-        panel.addEventListener('mouseenter', () => {
-            if (hideTimeout) { clearTimeout(hideTimeout); hideTimeout = null; }
-        });
-
-        panel.addEventListener('mouseleave', () => {
-            hideTimeout = setTimeout(() => closePanel(), 350);
-        });
-
-        // Volume slider handler
+        // ── Volume slider ──
         volSlider.addEventListener('input', (e) => {
             e.stopPropagation();
             const val = parseInt(e.target.value, 10);
             state.currentVolume = val / 100;
-            volValLabel.textContent = val + '%';
-            chipVolVal.textContent = val + '%';
             applyVolume();
+            persistState();
+            syncDisplay();
         });
 
-        // Speed slider handler
-        speedSlider.addEventListener('input', (e) => {
+        // Capture pointer on volume slider to prevent video player interaction
+        volSlider.addEventListener('pointerdown', (e) => {
             e.stopPropagation();
-            const raw = parseInt(e.target.value, 10);
-            state.currentSpeed = raw / 10;
-            const display = state.currentSpeed.toFixed(1);
-            speedValLabel.textContent = display + 'x';
-            chipSpeedVal.textContent = display + 'x';
-            applySpeed();
+            e.stopImmediatePropagation();
+            volSlider.setPointerCapture(e.pointerId);
+        });
+        volSlider.addEventListener('pointermove', (e) => {
+            e.stopPropagation();
+            e.stopImmediatePropagation();
+        });
+        volSlider.addEventListener('pointerup', (e) => {
+            e.stopPropagation();
+            e.stopImmediatePropagation();
         });
 
-        // Quick buttons
-        panel.querySelectorAll('.mc-qbtn').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                const action = btn.dataset.action;
-                const val = parseInt(btn.dataset.val, 10);
+        // ── Scroll wheel on volume zone ──
+        volZone.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const step = e.deltaY < 0 ? 5 : -5; // scroll up = louder
+            let next = Math.round(state.currentVolume * 100) + step;
+            next = Math.max(0, Math.min(500, next));
+            state.currentVolume = next / 100;
+            applyVolume();
+            persistState();
+            syncDisplay();
+        }, { passive: false });
 
-                if (action === 'vol') {
-                    state.currentVolume = val / 100;
-                    applyVolume();
-                } else if (action === 'speed') {
-                    state.currentSpeed = val / 10;
-                    applySpeed();
+        // ── Drag to reposition ──
+        let dragging = false;
+        let dragStartX = 0, dragStartY = 0;
+        let badgeX = 8, badgeY = 8;
+
+        badge.addEventListener('mousedown', (e) => {
+            e.stopPropagation(); // Always stop it from reaching YouTube!
+
+            // Don't drag from interactive elements
+            const t = e.target;
+            if (t.closest && (t.closest('.mc-sbtn') || t.closest('.mc-vslider') || t.closest('.mc-eye-pop'))) return;
+
+            // Prevent text selection / native browser drag sequence
+            e.preventDefault();
+
+            dragStartX = e.clientX;
+            dragStartY = e.clientY;
+            dragging = false;
+
+            const onMove = (me) => {
+                me.stopPropagation();
+                me.preventDefault();
+                const dx = me.clientX - dragStartX;
+                const dy = me.clientY - dragStartY;
+
+                if (!dragging && (Math.abs(dx) > 3 || Math.abs(dy) > 3)) {
+                    dragging = true;
+                    badge.classList.add('mc-dragging');
                 }
-                syncDisplay();
-            });
+
+                if (dragging) {
+                    badge.style.left = (badgeX + dx) + 'px';
+                    badge.style.top = (badgeY + dy) + 'px';
+                }
+            };
+
+            const onUp = (ue) => {
+                ue.stopPropagation();
+                if (dragging) {
+                    badgeX += ue.clientX - dragStartX;
+                    badgeY += ue.clientY - dragStartY;
+                    badge.classList.remove('mc-dragging');
+                }
+                dragging = false;
+                ['mousemove', 'pointermove', 'touchmove'].forEach(evt => document.removeEventListener(evt, onMove, true));
+                ['mouseup', 'pointerup', 'touchend', 'touchcancel'].forEach(evt => document.removeEventListener(evt, onUp, true));
+            };
+
+            ['mousemove', 'pointermove', 'touchmove'].forEach(evt => document.addEventListener(evt, onMove, true));
+            ['mouseup', 'pointerup', 'touchend', 'touchcancel'].forEach(evt => document.addEventListener(evt, onUp, true));
         });
 
-        // Prevent clicks on overlay from affecting video player beneath
-        host.addEventListener('click', (e) => {
-            // Only stop propagation when clicking on interactive elements
-        }, true);
+        // ── Prevent video player interaction ──
+        ['mousedown', 'click', 'dblclick', 'mouseup', 'pointerdown', 'pointerup', 'pointermove', 'mousemove', 'contextmenu', 'wheel',
+            'dragstart', 'drag', 'drop', 'touchstart', 'touchmove', 'keydown', 'keyup', 'keypress'
+        ].forEach(evt => badge.addEventListener(evt, (e) => e.stopPropagation(), false)); // false = bubble phase
+        badge.addEventListener('dragstart', (e) => { e.preventDefault(); e.stopPropagation(); }, false);
 
-        // Ensure the video's parent is positioned so the overlay aligns
+        // Position and insert
         positionOverlay(video, host);
-
         state.overlays.set(video, { host, syncDisplay });
-
-        // Show badge briefly on load
-        badge.classList.add('mc-visible');
-        setTimeout(() => badge.classList.remove('mc-visible'), 2500);
     }
 
     function positionOverlay(video, host) {
         const parent = video.parentElement;
         if (!parent) return;
 
-        // Make sure parent is a positioning context
         const parentStyle = getComputedStyle(parent);
         if (parentStyle.position === 'static') {
             parent.style.position = 'relative';
         }
 
-        // Insert overlay as sibling right after the video
         if (video.nextSibling) {
             parent.insertBefore(host, video.nextSibling);
         } else {
@@ -457,7 +626,6 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
             });
         }
 
-        // Sync all overlays
         syncAllOverlays();
     }
 
@@ -466,7 +634,6 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
             media.playbackRate = state.currentSpeed;
         });
 
-        // Sync all overlays
         syncAllOverlays();
     }
 
@@ -527,6 +694,15 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
         });
     }
 
+    // ── Persist state to chrome.storage so popup can read live values ──
+    function persistState() {
+        chrome.runtime.sendMessage({
+            action: 'persistState',
+            volume: Math.round(state.currentVolume * 100),
+            speed: Math.round(state.currentSpeed * 10)
+        }).catch(() => { /* popup/bg might not be listening */ });
+    }
+
     chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         if (message.action === 'setVolume') {
             state.currentVolume = message.value;
@@ -553,6 +729,11 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
             hookMediaElements();
             syncAllOverlays();
             sendResponse({ success: true });
+        } else if (message.action === 'getState') {
+            sendResponse({
+                volume: Math.round(state.currentVolume * 100),
+                speed: Math.round(state.currentSpeed * 10)
+            });
         }
         return true;
     });

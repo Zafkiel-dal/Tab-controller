@@ -7,18 +7,20 @@ document.addEventListener('DOMContentLoaded', () => {
     chrome.storage.local.get(['themePref'], (result) => {
         if (result.themePref === 'light') {
             rootElement.setAttribute('data-theme', 'light');
+            themeToggle.checked = false;
+        } else {
+            themeToggle.checked = true;
         }
     });
 
     // Toggle and save theme
-    themeToggle.addEventListener('click', () => {
-        const currentTheme = rootElement.getAttribute('data-theme');
-        let newTheme = 'dark';
-        if (!currentTheme || currentTheme === 'dark') {
-            newTheme = 'light';
+    themeToggle.addEventListener('change', (e) => {
+        const newTheme = e.target.checked ? 'dark' : 'light';
+        if (newTheme === 'light') {
+            rootElement.setAttribute('data-theme', 'light');
+        } else {
+            rootElement.removeAttribute('data-theme');
         }
-        
-        rootElement.setAttribute('data-theme', newTheme);
         chrome.storage.local.set({ themePref: newTheme });
     });
 
@@ -39,7 +41,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const data = {};
         data[storageKey] = value;
         chrome.storage.local.set(data);
-        
+
         const convertedValue = action === 'setVolume' ? parseInt(value, 10) / 100 : parseFloat(value) / 10;
 
         chrome.tabs.sendMessage(tabId, {
@@ -73,21 +75,46 @@ document.addEventListener('DOMContentLoaded', () => {
         sendToContentScript('setSpeed', speedScaled, tabId, `tab_speed_${tabId}`);
     }
 
+    // Apply values to UI
+    function applyToUI(vol, speed) {
+        volSlider.value = vol;
+        volValueDisplay.textContent = vol + '%';
+        speedSlider.value = speed;
+        speedValueDisplay.textContent = (speed / 10).toFixed(1) + 'x';
+    }
+
     // Initialize State for current tab
-    chrome.tabs.query({active: true, currentWindow: true}, (tabs) => {
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
         if (tabs.length === 0) return;
         const tabId = tabs[0].id;
-        
-        chrome.storage.local.get([`tab_volume_${tabId}`, `tab_speed_${tabId}`], (result) => {
-            const currentVol = result[`tab_volume_${tabId}`] !== undefined ? result[`tab_volume_${tabId}`] : 100;
-            const currentSpeed = result[`tab_speed_${tabId}`] !== undefined ? result[`tab_speed_${tabId}`] : 10;
-            
-            volSlider.value = currentVol;
-            volValueDisplay.textContent = currentVol + '%';
-            
-            speedSlider.value = currentSpeed;
-            speedValueDisplay.textContent = (currentSpeed / 10).toFixed(1) + 'x';
-        });
+
+        // Try to get live state from content script first, fall back to storage
+        chrome.tabs.sendMessage(tabId, { action: 'getState' })
+            .then((response) => {
+                if (response && response.volume !== undefined) {
+                    applyToUI(response.volume, response.speed);
+                    // Also update storage to keep in sync
+                    chrome.storage.local.set({
+                        [`tab_volume_${tabId}`]: response.volume,
+                        [`tab_speed_${tabId}`]: response.speed
+                    });
+                } else {
+                    // Fallback to storage
+                    loadFromStorage(tabId);
+                }
+            })
+            .catch(() => {
+                // Content script not available, fallback to storage
+                loadFromStorage(tabId);
+            });
+
+        function loadFromStorage(tid) {
+            chrome.storage.local.get([`tab_volume_${tid}`, `tab_speed_${tid}`], (result) => {
+                const currentVol = result[`tab_volume_${tid}`] !== undefined ? result[`tab_volume_${tid}`] : 100;
+                const currentSpeed = result[`tab_speed_${tid}`] !== undefined ? result[`tab_speed_${tid}`] : 10;
+                applyToUI(currentVol, currentSpeed);
+            });
+        }
 
         // Event Listeners for Volume
         volSlider.addEventListener('input', (e) => updateVolume(e.target.value, tabId));

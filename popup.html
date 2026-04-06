@@ -7,38 +7,40 @@
     <style>
         :root {
             /* Dark Theme (Default) */
-            --bg-color: #1e1e2e;
+            --bg-color: #181825;
             --text-color: #cdd6f4;
-            --section-bg: #313244;
-            --border-color: #45475a;
+            --section-bg: #1e1e2e;
+            --border-color: #313244;
             --primary-color: #89b4fa;
-            --btn-bg: #45475a;
+            --btn-bg: #313244;
             --btn-text: #cdd6f4;
-            --btn-hover: #585b70;
+            --btn-hover: #45475a;
             --header-color: #b4befe;
+            --switch-bg: #45475a;
         }
 
         [data-theme="light"] {
             /* Light Theme */
-            --bg-color: #f4f5f7;
-            --text-color: #17171d;
+            --bg-color: #f8f9fa;
+            --text-color: #212529;
             --section-bg: #ffffff;
-            --border-color: #d1d5db;
-            --primary-color: #2563eb;
-            --btn-bg: #e5e7eb;
-            --btn-text: #374151;
-            --btn-hover: #d1d5db;
-            --header-color: #1f2937;
+            --border-color: #dee2e6;
+            --primary-color: #3b82f6;
+            --btn-bg: #e9ecef;
+            --btn-text: #495057;
+            --btn-hover: #ced4da;
+            --header-color: #212529;
+            --switch-bg: #ced4da;
         }
 
         body {
-            width: 330px;
-            padding: 20px;
+            width: 280px;
+            padding: 16px;
             background-color: var(--bg-color);
             color: var(--text-color);
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             margin: 0;
-            border-radius: 8px;
+            border-radius: 12px;
             transition: background-color 0.3s, color 0.3s;
         }
 
@@ -46,123 +48,177 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 15px;
+            margin-bottom: 20px;
         }
 
         h2 {
             margin: 0;
-            font-size: 18px;
+            font-size: 16px;
             font-weight: 600;
             color: var(--header-color);
+            letter-spacing: -0.02em;
         }
 
-        .theme-toggle {
+        /* Toggle Switch CSS */
+        .theme-switch {
+            position: relative;
+            display: inline-block;
+            width: 38px;
+            height: 20px;
+        }
+
+        .theme-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .switch-slider {
+            position: absolute;
             cursor: pointer;
-            background: none;
-            border: none;
-            color: var(--text-color);
-            font-size: 18px;
-            padding: 4px;
-            transition: opacity 0.2s;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: var(--switch-bg);
+            transition: .3s;
+            border-radius: 20px;
         }
 
-        .theme-toggle:hover {
-            opacity: 0.7;
+        .switch-slider:before {
+            position: absolute;
+            content: "";
+            height: 14px;
+            width: 14px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: .3s;
+            border-radius: 50%;
+        }
+
+        input:checked + .switch-slider {
+            background-color: var(--primary-color);
+        }
+
+        input:checked + .switch-slider:before {
+            transform: translateX(18px);
         }
 
         .section {
-            margin-bottom: 20px;
-            padding: 15px;
+            margin-bottom: 16px;
+            padding: 12px;
             background-color: var(--section-bg);
             border-radius: 8px;
             border: 1px solid var(--border-color);
             transition: background-color 0.3s, border-color 0.3s;
         }
+        
+        .section:last-child {
+            margin-bottom: 0;
+        }
+
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
 
         .section-title {
-            font-size: 14px;
-            margin-bottom: 12px;
-            font-weight: bold;
+            font-size: 13px;
+            font-weight: 500;
             display: flex;
             align-items: center;
             gap: 6px;
         }
 
+        .value-display {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--primary-color);
+        }
+
         .slider-wrapper {
             display: flex;
             align-items: center;
-            gap: 10px;
-            margin-bottom: 10px;
+            margin-bottom: 8px;
         }
 
         input[type="range"] {
             flex: 1;
+            height: 4px;
+            border-radius: 2px;
+            outline: none;
             cursor: pointer;
             accent-color: var(--primary-color);
         }
 
-        .value-display {
-            font-size: 15px;
-            font-weight: bold;
-            color: var(--primary-color);
-            min-width: 50px;
-            text-align: right;
-        }
-
         .controls {
             display: flex;
-            justify-content: center;
-            gap: 10px;
-            margin-top: 10px;
+            gap: 6px;
         }
 
         .btn-action {
+            flex: 1;
             background-color: var(--btn-bg);
             color: var(--btn-text);
             border: none;
-            padding: 6px 14px;
-            border-radius: 4px;
+            padding: 6px 0;
+            border-radius: 6px;
             cursor: pointer;
             transition: background-color 0.2s, color 0.2s;
-            font-weight: 600;
-            font-size: 12px;
+            font-weight: 500;
+            font-size: 11px;
         }
 
         .btn-action:hover {
             background-color: var(--btn-hover);
+            color: var(--text-color);
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
         }
     </style>
 </head>
 
 <body>
     <div class="header">
-        <h2>Media Controller</h2>
-        <button id="themeToggle" class="theme-toggle" title="Toggle Theme">🌓</button>
+        <h2>Media Controls</h2>
+        <label class="theme-switch" title="Toggle Dark/Light Mode">
+            <input type="checkbox" id="themeToggle" checked>
+            <span class="switch-slider"></span>
+        </label>
     </div>
 
     <div class="section">
-        <div class="section-title">🔊 Volume Boost</div>
-        <div class="slider-wrapper">
-            <span>0%</span>
-            <input type="range" id="volumeSlider" min="0" max="500" value="100">
+        <div class="section-header">
+            <div class="section-title">🔊 Volume</div>
             <div class="value-display" id="volumeValue">100%</div>
         </div>
+        <div class="slider-wrapper">
+            <input type="range" id="volumeSlider" min="0" max="500" value="100">
+        </div>
         <div class="controls">
-            <button class="btn-action" id="btnVolReset">Reset (100%)</button>
-            <button class="btn-action" id="btnVolMute">Mute (0%)</button>
+            <button class="btn-action" id="btnVolReset">Reset</button>
+            <button class="btn-action" id="btnVolMute">Mute</button>
         </div>
     </div>
 
     <div class="section">
-        <div class="section-title">⏩ Playback Speed</div>
-        <div class="slider-wrapper">
-            <span>0.1x</span>
-            <input type="range" id="speedSlider" min="1" max="160" value="10">
+        <div class="section-header">
+            <div class="section-title">⏩ Speed</div>
             <div class="value-display" id="speedValue">1.0x</div>
         </div>
+        <div class="slider-wrapper">
+            <input type="range" id="speedSlider" min="1" max="160" value="10">
+        </div>
         <div class="controls">
-            <button class="btn-action" id="btnSpeedReset">Normal (1.0x)</button>
-            <button class="btn-action" id="btnSpeedFast">Fast (2.0x)</button>
+            <button class="btn-action" id="btnSpeedReset">Normal</button>
+            <button class="btn-action" id="btnSpeedFast">2.0x</button>
         </div>
     </div>
 
