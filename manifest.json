@@ -2,6 +2,17 @@
   "manifest_version": 3,
   "name": "Media Controller",
   "version": "1.2",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "media-controller@extension.local",
+      "strict_min_version": "109.0",
+      "data_collection_permissions": {
+        "required": [
+          "none"
+        ]
+      }
+    }
+  },
   "description": "Adjust volume up to 500% and playback speed up to 16x for individual tabs.",
   "permissions": [
     "activeTab",
