@@ -30,9 +30,4 @@ When you hover over a video, a small badge shows the current speed and volume in
 **Theme switching:**
 There's a toggle button at the top of the popup to switch between dark and light mode.
 
-## Technical notes
 
-- Volume boost works through the Web Audio API (`GainNode`), so it can push past 100% without distortion on most content.
-- The content script uses Shadow DOM for the overlay widget, so it won't clash with any site's existing styles.
-- A `MutationObserver` watches for dynamically added media elements (common on SPAs like YouTube, Bilibili, Instagram reels, etc.), so the extension picks up new videos automatically as you scroll.
-- Cross-origin media elements are handled gracefully — if the Audio API can't connect, it falls back silently.
