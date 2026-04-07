@@ -240,6 +240,34 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
         return el;
     }
 
+    function createSvgIcon({ width, height, viewBox, stroke = 'currentColor', attrs = {}, children = [] }) {
+        const SVG_NS = 'http://www.w3.org/2000/svg';
+        const svg = document.createElementNS(SVG_NS, 'svg');
+        svg.setAttribute('xmlns', SVG_NS);
+        svg.setAttribute('width', String(width));
+        svg.setAttribute('height', String(height));
+        svg.setAttribute('viewBox', viewBox);
+        svg.setAttribute('fill', 'none');
+        svg.setAttribute('stroke', stroke);
+        svg.setAttribute('stroke-width', '2');
+        svg.setAttribute('stroke-linecap', 'round');
+        svg.setAttribute('stroke-linejoin', 'round');
+
+        Object.entries(attrs).forEach(([key, value]) => {
+            svg.setAttribute(key, String(value));
+        });
+
+        children.forEach(({ tag, attrs: childAttrs }) => {
+            const child = document.createElementNS(SVG_NS, tag);
+            Object.entries(childAttrs).forEach(([key, value]) => {
+                child.setAttribute(key, String(value));
+            });
+            svg.appendChild(child);
+        });
+
+        return svg;
+    }
+
     function createOverlayForVideo(video) {
         if (state.overlays.has(video)) return;
 
@@ -289,7 +317,15 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
         // ── Opacity Zone ──
         const eyeZone = createEl('div', 'mc-zone mc-zone-eye');
         const eyeIcon = createEl('span', 'mc-label');
-        eyeIcon.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg>`; // SVG eye icon
+        eyeIcon.appendChild(createSvgIcon({
+            width: 13,
+            height: 13,
+            viewBox: '0 0 24 24',
+            children: [
+                { tag: 'path', attrs: { d: 'M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0' } },
+                { tag: 'circle', attrs: { cx: '12', cy: '12', r: '3' } }
+            ]
+        })); // SVG eye icon
 
         const eyePop = createEl('div', 'mc-eye-pop');
         const eyeSlider = createEl('input', 'mc-vslider', '', {
@@ -303,7 +339,16 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
         // ── Reset Zone ──
         const resetZone = createEl('div', 'mc-zone mc-zone-reset');
         resetZone.title = "Reset (1.0x Speed, 100% Volume)";
-        resetZone.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:#ffffff !important;"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>`; // SVG reset icon
+        resetZone.appendChild(createSvgIcon({
+            width: 13,
+            height: 13,
+            viewBox: '0 0 24 24',
+            attrs: { style: 'color:#ffffff !important;' },
+            children: [
+                { tag: 'path', attrs: { d: 'M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8' } },
+                { tag: 'path', attrs: { d: 'M3 3v5h5' } }
+            ]
+        })); // SVG reset icon
         resetZone.addEventListener('click', (e) => {
             e.stopPropagation();
             state.currentSpeed = 1.0;
