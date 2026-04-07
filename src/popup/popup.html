@@ -3,6 +3,7 @@
 
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
     <title>Media Controller</title>
     <link rel="stylesheet" href="popup.css">
 </head>
@@ -18,7 +19,7 @@
 
     <div class="section">
         <div class="section-header">
-            <div class="section-title">🔊 Volume</div>
+            <div class="section-title">Volume</div>
             <div class="value-display" id="volumeValue">100%</div>
         </div>
         <div class="slider-wrapper">
@@ -32,15 +33,28 @@
 
     <div class="section">
         <div class="section-header">
-            <div class="section-title">⏩ Speed</div>
-            <div class="value-display" id="speedValue">1.0x</div>
+            <div class="section-title">Speed</div>
+            <div class="value-display" id="speedValue">1.00x</div>
         </div>
         <div class="slider-wrapper">
-            <input type="range" id="speedSlider" min="1" max="160" value="10">
+            <input type="range" id="speedSlider" min="25" max="1600" step="25" value="100">
         </div>
         <div class="controls">
             <button class="btn-action" id="btnSpeedReset">Normal</button>
-            <button class="btn-action" id="btnSpeedFast">2.0x</button>
+            <button class="btn-action" id="btnSpeedFast">2.00x</button>
+        </div>
+    </div>
+
+    <div class="section section-save">
+        <div class="section-header">
+            <div class="section-title">Save Presets</div>
+            <div id="saveStatusBadge" class="save-badge save-badge--hidden"></div>
+        </div>
+        <div id="saveInfo" class="save-info">Select a mode to lock settings.</div>
+        <div class="controls">
+            <button class="btn-action btn-save" id="btnSaveTab">Tab</button>
+            <button class="btn-action btn-save" id="btnSaveDomain">Domain</button>
+            <button class="btn-action btn-save" id="btnSaveGlobal">Default</button>
         </div>
     </div>
 

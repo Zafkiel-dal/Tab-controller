@@ -1,6 +1,7 @@
 // Ensure we don't inject multiple times per frame
 if (typeof window.__mediaControllerInjected === 'undefined') {
     window.__mediaControllerInjected = true;
+    const SPEED_SCALE = 100;
 
     // We store references to avoid garbage collection and re-creating nodes
     const state = {
@@ -46,33 +47,51 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
             :host {
                 all: initial;
                 position: absolute;
-                z-index: 2147483647;
-                font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
-                pointer-events: auto;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                font-family: 'Inter', system-ui, -apple-system, sans-serif;
+                pointer-events: none; /* Let clicks pass through the host... */
             }
 
             .mc-badge {
                 position: absolute;
                 top: 8px;
-                left: 8px;
+                left: 50%;
+                transform: translateX(-50%);
                 display: flex;
                 align-items: center;
-                gap: 0;
-                background: rgba(15, 15, 20, 0.82);
-                backdrop-filter: blur(12px);
-                -webkit-backdrop-filter: blur(12px);
-                border: 1px solid rgba(255, 255, 255, 0.08);
-                border-radius: 8px;
-                padding: 0;
+                gap: 2px;
+                background: rgba(15, 15, 20, 0.75);
+                backdrop-filter: blur(20px) saturate(180%);
+                -webkit-backdrop-filter: blur(20px) saturate(180%);
+                border: 1px solid rgba(255, 255, 255, 0.12);
+                border-radius: 100px;
+                padding: 2px 4px;
                 user-select: none;
-                box-shadow: 0 2px 10px rgba(0,0,0,0.35);
+                box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
                 opacity: var(--mc-idle-opacity, 0.45);
-                transition: opacity 0.2s ease;
-                pointer-events: auto;
+                transition: opacity 0.3s ease, background 0.3s ease, transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+                pointer-events: auto; /* ...but capture clicks on the badge itself */
+                -webkit-tap-highlight-color: transparent;
+                z-index: 2147483647; /* Reinforce z-index */
             }
 
-            .mc-badge:hover {
+            .mc-badge:hover, .mc-badge.mc-pop-active {
                 opacity: 1 !important;
+                background: rgba(15, 15, 20, 0.88);
+                box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
+                transform: translateX(-50%) scale(1.03);
+            }
+
+            /* ── Smooth Dragging Fix ── */
+            /* Disable ALL transitions during dragging to follow the cursor instantly */
+            .mc-badge.mc-dragging {
+                opacity: 1 !important;
+                background: rgba(15, 15, 20, 0.88);
+                transition: none !important;
+                transform: none !important; /* Managed by direct top/left updates */
             }
 
             /* ── Chip (each half of the badge) ── */
@@ -80,242 +99,134 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
                 position: relative;
                 display: flex;
                 align-items: center;
-                padding: 4px 8px;
+                padding: 4px 10px;
                 cursor: default;
+                border-radius: 100px;
+                transition: all 0.2s ease;
+                touch-action: manipulation;
             }
 
-            .mc-zone::after {
-                content: '';
-                position: absolute;
-                bottom: -10px;
-                left: 0;
-                right: 0;
-                height: 10px;
-            }
-
-            .mc-zone-speed {
-                border-radius: 8px 0 0 8px;
-            }
-            .mc-zone-speed:hover {
-                background: rgba(166, 227, 161, 0.08);
-            }
-
-            .mc-zone-vol {
-                border-radius: 0;
-            }
-            .mc-zone-vol:hover {
-                background: rgba(137, 180, 250, 0.08);
-            }
+            .mc-zone-speed:hover { background: rgba(166, 227, 161, 0.12); }
+            .mc-zone-vol:hover   { background: rgba(137, 180, 250, 0.12); }
+            .mc-zone-eye:hover   { background: rgba(255, 255, 255, 0.1); }
+            .mc-zone-reset { color: #ffffff !important; } /* White by default as requested */
+            .mc-zone-reset:hover { background: rgba(255, 255, 255, 0.15); }
 
             .mc-sep {
                 width: 1px;
-                height: 16px;
+                height: 12px;
                 background: rgba(255, 255, 255, 0.1);
-                flex-shrink: 0;
-            }
-
-            .mc-badge.mc-dragging {
-                cursor: grabbing !important;
-                opacity: 1 !important;
-                transition: none !important;
-            }
-
-            /* ── Opacity Slider (Eye Zone) ── */
-            .mc-zone-eye {
-                border-radius: 0;
-                color: rgba(205, 214, 244, 0.5);
-                border-left: 1px solid rgba(255, 255, 255, 0.06);
-            }
-            .mc-zone-eye:hover {
-                background: rgba(255, 255, 255, 0.08);
-                color: rgba(205, 214, 244, 0.9);
-            }
-
-            /* ── Reset Zone ── */
-            .mc-zone-reset {
-                border-radius: 0 8px 8px 0;
-                color: rgba(205, 214, 244, 0.4);
-                border-left: 1px solid rgba(255, 255, 255, 0.06);
-                cursor: pointer;
-            }
-            .mc-zone-reset:hover {
-                background: rgba(243, 139, 168, 0.08); /* slight red tint on hover */
-                color: #f38ba8;
-            }
-
-            .mc-eye-pop {
-                position: absolute;
-                top: 100%;
-                left: 50%;
-                transform: translateX(-50%) translateY(4px) scale(0.95);
-                display: flex;
-                align-items: center;
-                gap: 6px;
-                background: rgba(15, 15, 20, 0.92);
-                backdrop-filter: blur(14px);
-                -webkit-backdrop-filter: blur(14px);
-                border: 1px solid rgba(255, 255, 255, 0.1);
-                border-radius: 7px;
-                padding: 5px 10px;
-                opacity: 0;
-                pointer-events: none;
-                transition: opacity 0.15s ease, transform 0.15s ease;
-                box-shadow: 0 4px 16px rgba(0,0,0,0.4);
-                white-space: nowrap;
-            }
-
-            .mc-zone-eye:hover .mc-eye-pop {
-                opacity: 1;
-                pointer-events: auto;
-                transform: translateX(-50%) translateY(4px) scale(1);
+                margin: 0;
             }
 
             .mc-label {
-                font-size: 11px;
-                font-weight: 600;
-                color: rgba(205, 214, 244, 0.85);
+                font-size: 10px;
+                font-weight: 700;
+                color: rgba(205, 214, 244, 0.9);
                 white-space: nowrap;
-                letter-spacing: 0.01em;
+                letter-spacing: 0.02em;
+                font-variant-numeric: tabular-nums;
             }
 
-            .mc-speed-val { color: #a6e3a1; }
+            .mc-speed-val { color: #a6e3a1; } 
             .mc-vol-val   { color: #89b4fa; }
 
-            /* ── Speed popover (3 buttons) ── */
-            .mc-spd-pop {
+            /* ── Popovers (Speed/Vol/Eye) ── */
+            .mc-spd-pop, .mc-vol-pop, .mc-eye-pop {
                 position: absolute;
-                top: 100%;
+                top: calc(100% - 2px); /* Slight overlap to maintain hover */
                 left: 50%;
-                transform: translateX(-50%) translateY(4px) scale(0.95);
+                transform: translateX(-50%) scale(0.95);
                 display: flex;
                 align-items: center;
-                gap: 2px;
-                background: rgba(15, 15, 20, 0.92);
-                backdrop-filter: blur(14px);
-                -webkit-backdrop-filter: blur(14px);
-                border: 1px solid rgba(255, 255, 255, 0.1);
-                border-radius: 7px;
-                padding: 3px 4px;
+                gap: 6px;
+                background: rgba(24, 24, 37, 0.98);
+                backdrop-filter: blur(16px);
+                -webkit-backdrop-filter: blur(16px);
+                border: 1px solid rgba(255, 255, 255, 0.12);
+                border-radius: 12px;
+                padding: 8px 10px;
                 opacity: 0;
                 pointer-events: none;
-                transition: opacity 0.15s ease, transform 0.15s ease;
-                box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+                transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+                box-shadow: 0 12px 48px rgba(0, 0, 0, 0.6);
+                margin-top: 5px;
             }
 
+            /* Transparent bridge to prevent losing hover in the gap */
+            .mc-spd-pop::before, .mc-vol-pop::before, .mc-eye-pop::before {
+                content: "";
+                position: absolute;
+                top: -10px;
+                left: 0;
+                right: 0;
+                height: 10px;
+                background: transparent;
+            }
 
-            .mc-zone-speed:hover .mc-spd-pop {
+            .mc-zone:hover .mc-spd-pop, .mc-zone:hover .mc-vol-pop, .mc-zone:hover .mc-eye-pop,
+            .mc-zone.mc-open .mc-spd-pop, .mc-zone.mc-open .mc-vol-pop, .mc-zone.mc-open .mc-eye-pop {
                 opacity: 1;
                 pointer-events: auto;
-                transform: translateX(-50%) translateY(4px) scale(1);
+                transform: translateX(-50%) scale(1);
             }
 
+            /* ── Interactive Elements inside Popovers ── */
             .mc-sbtn {
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                width: auto;
-                height: 22px;
+                min-width: 26px;
+                height: 26px;
                 border: none;
-                border-radius: 4px;
-                background: transparent;
-                color: rgba(205, 214, 244, 0.8);
-                font-size: 13px;
+                border-radius: 7px;
+                background: rgba(255, 255, 255, 0.05);
+                color: rgba(205, 214, 244, 0.9);
+                font-size: 12px;
                 font-weight: 700;
                 cursor: pointer;
-                transition: background 0.12s, color 0.12s;
+                transition: all 0.15s ease;
                 padding: 0 5px;
-                line-height: 1;
-                font-family: inherit;
             }
 
-            .mc-sbtn:hover {
-                background: rgba(166, 227, 161, 0.18);
-                color: #a6e3a1;
-            }
-
-            .mc-sbtn-rst {
-                font-size: 10px;
-                width: auto;
-                padding: 0 6px;
-                color: rgba(205, 214, 244, 0.55);
-                font-weight: 600;
-            }
-            .mc-sbtn-rst:hover {
-                color: #a6e3a1;
-            }
-
-            /* ── Volume popover (slider) ── */
-            .mc-vol-pop {
-                position: absolute;
-                top: 100%;
-                left: 50%;
-                transform: translateX(-50%) translateY(4px) scale(0.95);
-                display: flex;
-                align-items: center;
-                gap: 6px;
-                background: rgba(15, 15, 20, 0.92);
-                backdrop-filter: blur(14px);
-                -webkit-backdrop-filter: blur(14px);
-                border: 1px solid rgba(255, 255, 255, 0.1);
-                border-radius: 7px;
-                padding: 5px 10px;
-                opacity: 0;
-                pointer-events: none;
-                transition: opacity 0.15s ease, transform 0.15s ease;
-                box-shadow: 0 4px 16px rgba(0,0,0,0.4);
-                white-space: nowrap;
-            }
-
-
-            .mc-zone-vol:hover .mc-vol-pop {
-                opacity: 1;
-                pointer-events: auto;
-                transform: translateX(-50%) translateY(4px) scale(1);
-            }
+            .mc-sbtn:hover { background: rgba(166, 227, 161, 0.2); color: #a6e3a1; }
+            .mc-sbtn:active { transform: scale(0.92); }
 
             .mc-vslider {
                 -webkit-appearance: none;
                 appearance: none;
-                width: 90px;
+                width: 84px;
                 height: 3px;
-                border-radius: 2px;
-                background: rgba(255, 255, 255, 0.12);
+                border-radius: 10px;
+                background: rgba(255, 255, 255, 0.1);
                 outline: none;
-                cursor: pointer;
             }
 
             .mc-vslider::-webkit-slider-thumb {
                 -webkit-appearance: none;
-                appearance: none;
                 width: 12px;
                 height: 12px;
                 border-radius: 50%;
                 background: #89b4fa;
-                border: 1.5px solid rgba(255, 255, 255, 0.15);
+                box-shadow: 0 0 10px rgba(137, 180, 250, 0.4);
                 cursor: pointer;
-                box-shadow: 0 1px 4px rgba(0,0,0,0.3);
-                transition: transform 0.12s;
-            }
-            .mc-vslider::-webkit-slider-thumb:hover {
-                transform: scale(1.15);
-            }
-
-            .mc-vslider::-moz-range-thumb {
-                width: 12px;
-                height: 12px;
-                border-radius: 50%;
-                background: #89b4fa;
-                border: 1.5px solid rgba(255, 255, 255, 0.15);
-                cursor: pointer;
+                border: 2px solid #1e1e2e;
             }
 
             .mc-vpct {
                 font-size: 10px;
-                font-weight: 700;
+                font-weight: 800;
                 color: #89b4fa;
-                min-width: 32px;
+                min-width: 30px;
                 text-align: right;
-                font-variant-numeric: tabular-nums;
+            }
+
+            /* Reset Icons */
+            .mc-zone-reset svg {
+                transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            }
+            .mc-zone-reset:hover svg {
+                transform: rotate(-180deg) scale(1.1);
             }
         `;
     }
@@ -344,7 +255,7 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
 
         // Speed zone
         const speedZone = createEl('div', 'mc-zone mc-zone-speed');
-        const speedFormatted = Number.isInteger(state.currentSpeed) ? state.currentSpeed.toFixed(1) : state.currentSpeed.toString();
+        const speedFormatted = state.currentSpeed.toFixed(2);
         const speedLabel = createEl('span', 'mc-label mc-speed-val', speedFormatted + 'x');
 
         // Speed popover: − | 1× | +
@@ -382,7 +293,7 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
 
         const eyePop = createEl('div', 'mc-eye-pop');
         const eyeSlider = createEl('input', 'mc-vslider', '', {
-            type: 'range', min: '20', max: '100', step: '5', value: '45'
+            type: 'range', min: '15', max: '100', step: '5', value: '45'
         });
         const eyePct = createEl('span', 'mc-vpct', '45%');
 
@@ -392,7 +303,7 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
         // ── Reset Zone ──
         const resetZone = createEl('div', 'mc-zone mc-zone-reset');
         resetZone.title = "Reset (1.0x Speed, 100% Volume)";
-        resetZone.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>`; // SVG reset icon
+        resetZone.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:#ffffff !important;"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>`; // SVG reset icon
         resetZone.addEventListener('click', (e) => {
             e.stopPropagation();
             state.currentSpeed = 1.0;
@@ -410,19 +321,21 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
             badge.style.setProperty('--mc-idle-opacity', val / 100);
         });
 
-        // Capture pointer on slider thumb to prevent video player interaction
-        eyeSlider.addEventListener('pointerdown', (e) => {
+        // Capture pointer events to ensure the slider works even on complex sites
+        const stopImmediate = (e) => {
             e.stopPropagation();
             e.stopImmediatePropagation();
-            eyeSlider.setPointerCapture(e.pointerId);
+        };
+
+        ['pointerdown', 'mousedown', 'touchstart'].forEach(evt => {
+            eyeSlider.addEventListener(evt, (e) => {
+                stopImmediate(e);
+                if (e.pointerId) eyeSlider.setPointerCapture(e.pointerId);
+            }, { capture: true });
         });
-        eyeSlider.addEventListener('pointermove', (e) => {
-            e.stopPropagation();
-            e.stopImmediatePropagation();
-        });
-        eyeSlider.addEventListener('pointerup', (e) => {
-            e.stopPropagation();
-            e.stopImmediatePropagation();
+
+        ['pointermove', 'mousemove', 'touchmove', 'pointerup', 'mouseup', 'touchend', 'click'].forEach(evt => {
+            eyeSlider.addEventListener(evt, stopImmediate, { capture: true });
         });
 
         eyeZone.addEventListener('wheel', (e) => {
@@ -430,7 +343,7 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
             e.stopPropagation();
             const step = e.deltaY < 0 ? 5 : -5;
             let next = parseInt(eyeSlider.value, 10) + step;
-            next = Math.max(20, Math.min(100, next));
+            next = Math.max(15, Math.min(100, next));
             eyeSlider.value = next;
             eyePct.textContent = next + '%';
             badge.style.setProperty('--mc-idle-opacity', next / 100);
@@ -446,7 +359,7 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
         // ── Sync helper ──
         function syncDisplay() {
             const volPercent = Math.round(state.currentVolume * 100);
-            const speedFormatted = Number.isInteger(state.currentSpeed) ? state.currentSpeed.toFixed(1) : state.currentSpeed.toString();
+            const speedFormatted = state.currentSpeed.toFixed(2);
 
             speedLabel.textContent = speedFormatted + 'x';
             volLabel.textContent = volPercent + '%';
@@ -493,7 +406,6 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
             stepSpeed(direction);
         }, { passive: false });
 
-        // ── Volume slider ──
         volSlider.addEventListener('input', (e) => {
             e.stopPropagation();
             const val = parseInt(e.target.value, 10);
@@ -501,6 +413,17 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
             applyVolume();
             persistState();
             syncDisplay();
+        });
+
+        ['pointerdown', 'mousedown', 'touchstart'].forEach(evt => {
+            volSlider.addEventListener(evt, (e) => {
+                stopImmediate(e);
+                if (e.pointerId) volSlider.setPointerCapture(e.pointerId);
+            }, { capture: true });
+        });
+
+        ['pointermove', 'mousemove', 'touchmove', 'pointerup', 'mouseup', 'touchend', 'click'].forEach(evt => {
+            volSlider.addEventListener(evt, stopImmediate, { capture: true });
         });
 
         // Capture pointer on volume slider to prevent video player interaction
@@ -531,30 +454,68 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
             syncDisplay();
         }, { passive: false });
 
-        // ── Drag to reposition ──
+        // ── Touch tap-toggle for popovers (Android / no-hover devices) ──
+        // We use window.matchMedia('(hover: none)') to detect touch-primary
+        // devices. On hover-capable devices the CSS :hover rules already handle it.
+        const isTouchPrimary = () => window.matchMedia('(hover: none)').matches;
+
+        const toggleZones = [
+            { zone: speedZone, key: 'speed' },
+            { zone: volZone, key: 'vol' },
+            { zone: eyeZone, key: 'eye' },
+        ];
+
+        function closeAllPops(exceptKey) {
+            toggleZones.forEach(({ zone, key }) => {
+                if (key !== exceptKey) zone.classList.remove('mc-open');
+            });
+            const anyOpen = toggleZones.some(({ zone }) => zone.classList.contains('mc-open'));
+            badge.classList.toggle('mc-pop-active', anyOpen);
+        }
+
+        toggleZones.forEach(({ zone, key }) => {
+            zone.addEventListener('click', (e) => {
+                if (!isTouchPrimary()) return; // handled by CSS hover on desktop
+                e.stopPropagation();
+                // Ignore clicks that originated from interactive children
+                if (e.target.closest && (e.target.closest('.mc-sbtn') || e.target.closest('.mc-vslider'))) return;
+                const wasOpen = zone.classList.contains('mc-open');
+                closeAllPops(null);
+                if (!wasOpen) {
+                    zone.classList.add('mc-open');
+                    badge.classList.add('mc-pop-active');
+                }
+            });
+        });
+
+        // Close all popovers when tapping outside the badge
+        document.addEventListener('click', (e) => {
+            if (!isTouchPrimary()) return;
+            // e.composedPath() works across Shadow DOM
+            const path = e.composedPath ? e.composedPath() : [];
+            if (!path.includes(badge)) {
+                closeAllPops(null);
+            }
+        }, { capture: true, passive: true });
+
+        // ── Drag to reposition (mouse + touch) ──
+        // Keep interactions reliable: do not start drag from interactive zones.
         let dragging = false;
         let dragStartX = 0, dragStartY = 0;
-        let badgeX = 8, badgeY = 8;
+        let badgeX = 0, badgeY = 8;
 
-        badge.addEventListener('mousedown', (e) => {
-            e.stopPropagation(); // Always stop it from reaching YouTube!
-
-            // Don't drag from interactive elements
-            const t = e.target;
-            if (t.closest && (t.closest('.mc-sbtn') || t.closest('.mc-vslider') || t.closest('.mc-eye-pop'))) return;
-
-            // Prevent text selection / native browser drag sequence
-            e.preventDefault();
-
-            dragStartX = e.clientX;
-            dragStartY = e.clientY;
+        function startDrag(startX, startY, e) {
+            dragStartX = startX;
+            dragStartY = startY;
             dragging = false;
 
             const onMove = (me) => {
                 me.stopPropagation();
                 me.preventDefault();
-                const dx = me.clientX - dragStartX;
-                const dy = me.clientY - dragStartY;
+                const cx = me.touches ? me.touches[0].clientX : me.clientX;
+                const cy = me.touches ? me.touches[0].clientY : me.clientY;
+                const dx = cx - dragStartX;
+                const dy = cy - dragStartY;
 
                 if (!dragging && (Math.abs(dx) > 3 || Math.abs(dy) > 3)) {
                     dragging = true;
@@ -570,8 +531,10 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
             const onUp = (ue) => {
                 ue.stopPropagation();
                 if (dragging) {
-                    badgeX += ue.clientX - dragStartX;
-                    badgeY += ue.clientY - dragStartY;
+                    const cx = ue.changedTouches ? ue.changedTouches[0].clientX : ue.clientX;
+                    const cy = ue.changedTouches ? ue.changedTouches[0].clientY : ue.clientY;
+                    badgeX += cx - dragStartX;
+                    badgeY += cy - dragStartY;
                     badge.classList.remove('mc-dragging');
                 }
                 dragging = false;
@@ -581,7 +544,42 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
 
             ['mousemove', 'pointermove', 'touchmove'].forEach(evt => document.addEventListener(evt, onMove, true));
             ['mouseup', 'pointerup', 'touchend', 'touchcancel'].forEach(evt => document.addEventListener(evt, onUp, true));
+        }
+
+        const canStartDragFromTarget = (target) => {
+            if (!target || !target.closest) return true;
+            return !target.closest('.mc-sbtn') && !target.closest('.mc-vslider') && !target.closest('.mc-eye-pop');
+        };
+
+        const anchorBadgeToTopCenter = () => {
+            badge.style.transform = 'none';
+            const badgeWidth = badge.offsetWidth || 0;
+            const hostWidth = host.offsetWidth || 0;
+            badgeX = Math.max(0, Math.round((hostWidth - badgeWidth) / 2));
+            badgeY = 8;
+            badge.style.left = badgeX + 'px';
+            badge.style.top = badgeY + 'px';
+        };
+
+        // Ensure centered placement after render and whenever layout changes.
+        setTimeout(anchorBadgeToTopCenter, 0);
+        window.addEventListener('resize', anchorBadgeToTopCenter);
+
+        badge.addEventListener('mousedown', (e) => {
+            e.stopPropagation();
+            const t = e.target;
+            if (!canStartDragFromTarget(t)) return;
+            startDrag(e.clientX, e.clientY, e);
         });
+
+        badge.addEventListener('touchstart', (e) => {
+            e.stopPropagation();
+            const t = e.target;
+            if (!canStartDragFromTarget(t)) return;
+            const touch = e.touches[0];
+            startDrag(touch.clientX, touch.clientY, e);
+        }, { passive: true });
+
 
         // ── Prevent video player interaction ──
         ['mousedown', 'click', 'dblclick', 'mouseup', 'pointerdown', 'pointerup', 'pointermove', 'mousemove', 'contextmenu', 'wheel',
@@ -668,6 +666,26 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
 
     function hookMediaElements() {
         document.querySelectorAll('video, audio').forEach(media => {
+            // Prevent duplicate listeners by marking the tag
+            if (media.dataset.mcHooked) return;
+            media.dataset.mcHooked = "true";
+
+            const enforceState = () => {
+                if (Math.abs(media.playbackRate - state.currentSpeed) > 0.05) {
+                    media.playbackRate = state.currentSpeed;
+                }
+            };
+
+            // Aggressive strict adherence to extension state
+            media.addEventListener('ratechange', enforceState);
+            media.addEventListener('loadeddata', enforceState);
+            media.addEventListener('play', enforceState);
+            media.addEventListener('loadstart', () => {
+                // Re-fetch preset whenever a new clip/source starts loading.
+                // This makes Default mode reset on each clip change even when URL does not change.
+                fetchAndApplyPreset();
+            });
+
             // For lazy-loaded media, wait until it has a src assigned
             if (!media.src && !media.currentSrc && media.readyState === 0) {
                 // Watch for when this specific element gets a src
@@ -694,13 +712,13 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
         });
     }
 
-    // ── Persist state to chrome.storage so popup can read live values ──
+    // Keep state in extension memory (background) only, never on disk.
     function persistState() {
         chrome.runtime.sendMessage({
             action: 'persistState',
             volume: Math.round(state.currentVolume * 100),
-            speed: Math.round(state.currentSpeed * 10)
-        }).catch(() => { /* popup/bg might not be listening */ });
+            speed: Math.round(state.currentSpeed * SPEED_SCALE)
+        }).catch(() => { });
     }
 
     chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -732,7 +750,7 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
         } else if (message.action === 'getState') {
             sendResponse({
                 volume: Math.round(state.currentVolume * 100),
-                speed: Math.round(state.currentSpeed * 10)
+                speed: Math.round(state.currentSpeed * SPEED_SCALE)
             });
         }
         return true;
@@ -765,6 +783,31 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
         subtree: true
     });
 
-    // Initial hook for elements already present when the script loads
+    // Request session preset from background memory.
+    const currentDomain = window.location.hostname;
+    function fetchAndApplyPreset() {
+        chrome.runtime.sendMessage({ action: 'requestInitialState', domain: currentDomain }, (response) => {
+            if (!response) return;
+            if (response.volume !== undefined) state.currentVolume = response.volume / 100;
+            if (response.speed !== undefined) state.currentSpeed = response.speed / SPEED_SCALE;
+            applySpeed();
+            applyVolume();
+        });
+    }
+
+    // Run on initial load.
+    fetchAndApplyPreset();
     hookMediaElements();
+
+    // Detect URL changes for SPA navigation (e.g. YouTube sidebar clicks)
+    // so we can restore the Baseline Preset over any temporary slider adjustments
+    let lastUrl = location.href;
+    new MutationObserver(() => {
+        const url = location.href;
+        if (url !== lastUrl) {
+            lastUrl = url;
+            // Delay slightly to ensure new elements have settled.
+            setTimeout(fetchAndApplyPreset, 100);
+        }
+    }).observe(document.body || document.documentElement, { subtree: true, childList: true });
 }
