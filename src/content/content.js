@@ -44,17 +44,25 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
 
     // ── Overlay Widget ──────────────────────────────────────────────────
 
-    function buildOverlayStyles() {
+    // Sites where TikTok-style layering blocks normal absolute positioning
+    const FIXED_OVERLAY_HOSTNAMES = ['www.tiktok.com', 'tiktok.com'];
+
+    function needsFixedOverlay() {
+        const host = window.location.hostname;
+        return FIXED_OVERLAY_HOSTNAMES.some(h => host === h || host.endsWith('.' + h));
+    }
+
+    function buildOverlayStyles(fixed) {
         return `
             :host {
                 all: initial;
-                position: absolute;
+                position: ${fixed ? 'fixed' : 'absolute'};
                 top: 0;
                 left: 0;
-                width: 100%;
-                height: 100%;
+                ${fixed ? '' : 'width: 100%; height: 100%;'}
                 font-family: 'Inter', system-ui, -apple-system, sans-serif;
-                pointer-events: none; /* Let clicks pass through the host... */
+                pointer-events: none;
+                z-index: 2147483647;
             }
 
             .mc-badge {
@@ -281,10 +289,16 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
         }
 
         const host = createEl('div', '__mc-overlay-host');
-        host.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:2147483647 !important;';
+        const isFixed = needsFixedOverlay();
+        host.dataset.mcFixed = isFixed ? '1' : '0';
+        if (isFixed) {
+            host.style.cssText = 'position:fixed;top:0;left:0;pointer-events:none;z-index:2147483647;';
+        } else {
+            host.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:2147483647;';
+        }
 
         const shadow = host.attachShadow({ mode: 'closed' });
-        const styleEl = createEl('style', '', buildOverlayStyles());
+        const styleEl = createEl('style', '', buildOverlayStyles(isFixed));
         shadow.appendChild(styleEl);
 
         // ── Badge ──
@@ -707,33 +721,67 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
     }
 
     function positionOverlay(video, host) {
-        // Try to find the actual player container for better stacking context (YouTube, FB Reels, TikTok, Bilibili)
-        // x1n2onr6 is a common container for FB/IG Reels; xgplayer for TikTok
-        let container = video.closest('.html5-video-player, .ytp-player-content, .x1n2onr6, ._video_wrapper, .video-container, .xgplayer, [data-e2e="video-player"], [data-e2e="feed-video"], [class*="DivVideoContainer"], ytd-reel-video-renderer, .bpx-player-video-area');
-        
-        // If no known container, walk up a bit to find a relative/absolute wrapper
-        if (!container) {
-            let curr = video.parentElement;
-            for (let i = 0; i < 4 && curr && curr !== document.body; i++) {
-                const style = getComputedStyle(curr);
-                if (style.position !== 'static') {
-                    container = curr;
-                    break;
-                }
-                curr = curr.parentElement;
+        const isFixed = host.dataset.mcFixed === '1';
+
+        if (isFixed) {
+            // ── Fixed mode: attach to body and track the video's screen rect ──
+            // This breaks out of any stacking context the site may create,
+            // which is required for TikTok Live whose UI layers block normal z-index.
+            document.body.appendChild(host);
+            syncFixedHostToVideo(video, host);
+
+            // Keep position in sync with video rect when the page changes
+            const updatePos = () => syncFixedHostToVideo(video, host);
+            window.addEventListener('scroll', updatePos, { passive: true, capture: true });
+            window.addEventListener('resize', updatePos, { passive: true });
+
+            if (typeof ResizeObserver !== 'undefined') {
+                const ro = new ResizeObserver(updatePos);
+                ro.observe(video);
+                // Disconnect when host is removed from DOM
+                const mo = new MutationObserver(() => {
+                    if (!document.contains(host)) { ro.disconnect(); mo.disconnect(); }
+                });
+                mo.observe(document.body, { childList: true, subtree: false });
             }
+        } else {
+            // ── Absolute mode: classic container-relative positioning (YouTube, FB, etc.) ──
+            let container = video.closest('.html5-video-player, .ytp-player-content, .x1n2onr6, ._video_wrapper, .video-container, ytd-reel-video-renderer, .bpx-player-video-area');
+
+            if (!container) {
+                let curr = video.parentElement;
+                for (let i = 0; i < 4 && curr && curr !== document.body; i++) {
+                    const style = getComputedStyle(curr);
+                    if (style.position !== 'static') {
+                        container = curr;
+                        break;
+                    }
+                    curr = curr.parentElement;
+                }
+            }
+
+            const player = container || video.parentElement;
+            if (!player) return;
+
+            const playerStyle = getComputedStyle(player);
+            if (playerStyle.position === 'static') {
+                player.style.position = 'relative';
+            }
+
+            // host is position:absolute; 100%x100% — fill the player container
+            host.style.width = '100%';
+            host.style.height = '100%';
+            player.appendChild(host);
         }
+    }
 
-        const player = container || video.parentElement;
-        if (!player) return;
-
-        const playerStyle = getComputedStyle(player);
-        if (playerStyle.position === 'static') {
-            player.style.position = 'relative';
-        }
-
-        // Add as child of player, but after the video stuff to be on top
-        player.appendChild(host);
+    function syncFixedHostToVideo(video, host) {
+        const r = video.getBoundingClientRect();
+        if (r.width === 0 && r.height === 0) return; // video not visible yet
+        host.style.left   = r.left   + 'px';
+        host.style.top    = r.top    + 'px';
+        host.style.width  = r.width  + 'px';
+        host.style.height = r.height + 'px';
     }
 
     function applyVolume() {
