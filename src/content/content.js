@@ -12,6 +12,8 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
         currentSpeed: 1.0,
         overlays: new WeakMap()
     };
+    
+    const hookedMedia = new WeakSet();
 
     function initAudio() {
         if (!state.audioContext) {
@@ -75,7 +77,7 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
                 transition: opacity 0.3s ease, background 0.3s ease, transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
                 pointer-events: auto; /* ...but capture clicks on the badge itself */
                 -webkit-tap-highlight-color: transparent;
-                z-index: 2147483647; /* Reinforce z-index */
+                z-index: 2147483647 !important; /* Reinforce z-index */
             }
 
             .mc-badge:hover, .mc-badge.mc-pop-active {
@@ -269,10 +271,17 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
     }
 
     function createOverlayForVideo(video) {
-        if (state.overlays.has(video)) return;
+        const existing = state.overlays.get(video);
+        if (existing) {
+            // Re-attach if it was removed by the site's own DOM cleanup (frequent on YouTube)
+            if (!document.contains(existing.host)) {
+                positionOverlay(video, existing.host);
+            }
+            return;
+        }
 
         const host = createEl('div', '__mc-overlay-host');
-        host.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:2147483647;';
+        host.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:2147483647 !important;';
 
         const shadow = host.attachShadow({ mode: 'closed' });
         const styleEl = createEl('style', '', buildOverlayStyles());
@@ -382,6 +391,11 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
         ['pointermove', 'mousemove', 'touchmove', 'pointerup', 'mouseup', 'touchend', 'click'].forEach(evt => {
             eyeSlider.addEventListener(evt, stopImmediate, { capture: true });
         });
+        eyeSlider.addEventListener('pointerup', (e) => {
+            if (e.pointerId && eyeSlider.hasPointerCapture(e.pointerId)) {
+                eyeSlider.releasePointerCapture(e.pointerId);
+            }
+        });
 
         eyeZone.addEventListener('wheel', (e) => {
             e.preventDefault();
@@ -413,21 +427,18 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
         }
 
         // ── Speed buttons ──
-        const SPEED_PRESETS = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
-
         function stepSpeed(direction) {
-            let curr = state.currentSpeed;
-            let closestIdx = 0;
-            let minDiff = Infinity;
-            SPEED_PRESETS.forEach((v, i) => {
-                const diff = Math.abs(v - curr);
-                if (diff < minDiff) {
-                    minDiff = diff;
-                    closestIdx = i;
-                }
-            });
-            let nextIdx = Math.max(0, Math.min(SPEED_PRESETS.length - 1, closestIdx + direction));
-            state.currentSpeed = SPEED_PRESETS[nextIdx];
+            let curr = Math.round(state.currentSpeed * 100);
+            let step = 25;
+            if (direction > 0) {
+                if (curr >= 800) step = 100;
+                else if (curr >= 400) step = 50;
+                state.currentSpeed = Math.min(1600, Math.ceil((curr + 1) / step) * step) / 100;
+            } else {
+                if (curr > 800) step = 100;
+                else if (curr > 400) step = 50;
+                state.currentSpeed = Math.max(25, Math.floor((curr - 1) / step) * step) / 100;
+            }
             applySpeed();
             persistState();
             syncDisplay();
@@ -484,6 +495,9 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
         volSlider.addEventListener('pointerup', (e) => {
             e.stopPropagation();
             e.stopImmediatePropagation();
+            if (e.pointerId && volSlider.hasPointerCapture(e.pointerId)) {
+                volSlider.releasePointerCapture(e.pointerId);
+            }
         });
 
         // ── Scroll wheel on volume zone ──
@@ -546,19 +560,52 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
         // ── Drag to reposition (mouse + touch) ──
         // Keep interactions reliable: do not start drag from interactive zones.
         let dragging = false;
+        let manuallyMoved = false;
         let dragStartX = 0, dragStartY = 0;
         let badgeX = 0, badgeY = 8;
+        let lastDragX = 0, lastDragY = 0;
+
+        const clampBadgePosition = (x, y) => {
+            if (!Number.isFinite(x) || !Number.isFinite(y)) {
+                return { x: badgeX, y: badgeY };
+            }
+            const hostRect = host.getBoundingClientRect();
+            const badgeRect = badge.getBoundingClientRect();
+            const hostWidth = hostRect.width || host.offsetWidth || 0;
+            const hostHeight = hostRect.height || host.offsetHeight || 0;
+            const badgeWidth = badgeRect.width || badge.offsetWidth || 0;
+            const badgeHeight = badgeRect.height || badge.offsetHeight || 0;
+
+            // On some players (e.g. YouTube during control/layout transitions),
+            // dimensions can briefly report as 0. Keep last committed position in that case.
+            if (hostWidth <= 0 || hostHeight <= 0 || badgeWidth <= 0 || badgeHeight <= 0) {
+                return { x: badgeX, y: badgeY };
+            }
+
+            const maxX = Math.max(0, hostWidth - badgeWidth);
+            const maxY = Math.max(0, hostHeight - badgeHeight);
+            return {
+                x: Math.max(0, Math.min(maxX, x)),
+                y: Math.max(0, Math.min(maxY, y))
+            };
+        };
 
         function startDrag(startX, startY, e) {
             dragStartX = startX;
             dragStartY = startY;
+            lastDragX = startX;
+            lastDragY = startY;
             dragging = false;
+            manuallyMoved = true;
 
             const onMove = (me) => {
                 me.stopPropagation();
                 me.preventDefault();
                 const cx = me.touches ? me.touches[0].clientX : me.clientX;
                 const cy = me.touches ? me.touches[0].clientY : me.clientY;
+                if (!Number.isFinite(cx) || !Number.isFinite(cy)) return;
+                lastDragX = cx;
+                lastDragY = cy;
                 const dx = cx - dragStartX;
                 const dy = cy - dragStartY;
 
@@ -568,32 +615,48 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
                 }
 
                 if (dragging) {
-                    badge.style.left = (badgeX + dx) + 'px';
-                    badge.style.top = (badgeY + dy) + 'px';
+                    const next = clampBadgePosition(badgeX + dx, badgeY + dy);
+                    badge.style.left = next.x + 'px';
+                    badge.style.top = next.y + 'px';
                 }
             };
 
             const onUp = (ue) => {
                 ue.stopPropagation();
                 if (dragging) {
-                    const cx = ue.changedTouches ? ue.changedTouches[0].clientX : ue.clientX;
-                    const cy = ue.changedTouches ? ue.changedTouches[0].clientY : ue.clientY;
-                    badgeX += cx - dragStartX;
-                    badgeY += cy - dragStartY;
-                    badge.classList.remove('mc-dragging');
+                    const endTouch = ue.changedTouches && ue.changedTouches[0];
+                    const cx = endTouch ? endTouch.clientX : ue.clientX;
+                    const cy = endTouch ? endTouch.clientY : ue.clientY;
+                    const safeX = Number.isFinite(cx) ? cx : lastDragX;
+                    const safeY = Number.isFinite(cy) ? cy : lastDragY;
+                    const finalPos = clampBadgePosition(
+                        badgeX + (safeX - dragStartX),
+                        badgeY + (safeY - dragStartY)
+                    );
+                    badgeX = finalPos.x;
+                    badgeY = finalPos.y;
+                    badge.style.left = badgeX + 'px';
+                    badge.style.top = badgeY + 'px';
                 }
+                // Always clear drag visual state
+                badge.classList.remove('mc-dragging');
                 dragging = false;
+
+                if (e.pointerId && badge.releasePointerCapture) {
+                    badge.releasePointerCapture(e.pointerId);
+                }
+
                 ['mousemove', 'pointermove', 'touchmove'].forEach(evt => document.removeEventListener(evt, onMove, true));
-                ['mouseup', 'pointerup', 'touchend', 'touchcancel'].forEach(evt => document.removeEventListener(evt, onUp, true));
+                ['mouseup', 'pointerup', 'pointercancel', 'touchend', 'touchcancel'].forEach(evt => document.removeEventListener(evt, onUp, true));
             };
 
             ['mousemove', 'pointermove', 'touchmove'].forEach(evt => document.addEventListener(evt, onMove, true));
-            ['mouseup', 'pointerup', 'touchend', 'touchcancel'].forEach(evt => document.addEventListener(evt, onUp, true));
+            ['mouseup', 'pointerup', 'pointercancel', 'touchend', 'touchcancel'].forEach(evt => document.addEventListener(evt, onUp, true));
         }
 
         const canStartDragFromTarget = (target) => {
             if (!target || !target.closest) return true;
-            return !target.closest('.mc-sbtn') && !target.closest('.mc-vslider') && !target.closest('.mc-eye-pop');
+            return !target.closest('.mc-sbtn') && !target.closest('.mc-vslider') && !target.closest('.mc-eye-pop') && !target.closest('.mc-zone-reset');
         };
 
         const anchorBadgeToTopCenter = () => {
@@ -608,21 +671,27 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
 
         // Ensure centered placement after render and whenever layout changes.
         setTimeout(anchorBadgeToTopCenter, 0);
-        window.addEventListener('resize', anchorBadgeToTopCenter);
+        window.addEventListener('resize', () => {
+            if (!manuallyMoved) anchorBadgeToTopCenter();
+        });
 
-        badge.addEventListener('mousedown', (e) => {
-            e.stopPropagation();
+        badge.addEventListener('pointerdown', (e) => {
+            // Only handle primary button or touch
+            if (e.pointerType === 'mouse' && e.button !== 0) return;
+
             const t = e.target;
             if (!canStartDragFromTarget(t)) return;
+
+            e.stopPropagation();
+            if (badge.setPointerCapture) badge.setPointerCapture(e.pointerId);
             startDrag(e.clientX, e.clientY, e);
         });
 
+        // Use fallback for non-pointer browsers if needed, but pointer is standard in Chrome
         badge.addEventListener('touchstart', (e) => {
-            e.stopPropagation();
             const t = e.target;
             if (!canStartDragFromTarget(t)) return;
-            const touch = e.touches[0];
-            startDrag(touch.clientX, touch.clientY, e);
+            // startDrag called here will still work if browser doesn't trigger pointerdown
         }, { passive: true });
 
 
@@ -638,19 +707,33 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
     }
 
     function positionOverlay(video, host) {
-        const parent = video.parentElement;
-        if (!parent) return;
-
-        const parentStyle = getComputedStyle(parent);
-        if (parentStyle.position === 'static') {
-            parent.style.position = 'relative';
+        // Try to find the actual player container for better stacking context (YouTube, FB Reels, TikTok, Bilibili)
+        // x1n2onr6 is a common container for FB/IG Reels; xgplayer for TikTok
+        let container = video.closest('.html5-video-player, .ytp-player-content, .x1n2onr6, ._video_wrapper, .video-container, .xgplayer, [data-e2e="video-player"], [data-e2e="feed-video"], [class*="DivVideoContainer"], ytd-reel-video-renderer, .bpx-player-video-area');
+        
+        // If no known container, walk up a bit to find a relative/absolute wrapper
+        if (!container) {
+            let curr = video.parentElement;
+            for (let i = 0; i < 4 && curr && curr !== document.body; i++) {
+                const style = getComputedStyle(curr);
+                if (style.position !== 'static') {
+                    container = curr;
+                    break;
+                }
+                curr = curr.parentElement;
+            }
         }
 
-        if (video.nextSibling) {
-            parent.insertBefore(host, video.nextSibling);
-        } else {
-            parent.appendChild(host);
+        const player = container || video.parentElement;
+        if (!player) return;
+
+        const playerStyle = getComputedStyle(player);
+        if (playerStyle.position === 'static') {
+            player.style.position = 'relative';
         }
+
+        // Add as child of player, but after the video stuff to be on top
+        player.appendChild(host);
     }
 
     function applyVolume() {
@@ -711,9 +794,9 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
 
     function hookMediaElements() {
         document.querySelectorAll('video, audio').forEach(media => {
-            // Prevent duplicate listeners by marking the tag
-            if (media.dataset.mcHooked) return;
-            media.dataset.mcHooked = "true";
+            // Prevent duplicate listeners by tracking object reference directly (handles cloned DOM nodes)
+            if (hookedMedia.has(media)) return;
+            hookedMedia.add(media);
 
             const enforceState = () => {
                 if (Math.abs(media.playbackRate - state.currentSpeed) > 0.05) {
@@ -789,8 +872,7 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
             sendResponse({ success: true });
         } else if (message.action === 'setSpeed') {
             state.currentSpeed = message.value;
-            hookMediaElements();
-            syncAllOverlays();
+            applySpeed();
             sendResponse({ success: true });
         } else if (message.action === 'getState') {
             sendResponse({

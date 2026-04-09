@@ -104,7 +104,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const volInt = parseInt(vol, 10);
         volSlider.value = volInt;
         volValueDisplay.textContent = volInt + '%';
-        
+
         // Update Mute button UI
         if (volInt === 0) {
             btnVolMute.classList.add('muted');
@@ -130,7 +130,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const volInt = parseInt(vol, 10);
         volSlider.value = volInt;
         volValueDisplay.textContent = volInt + '%';
-        
+
         if (volInt === 0) {
             btnVolMute.classList.add('muted');
             btnVolMute.textContent = 'Muted';
@@ -254,10 +254,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         btnSaveGlobal.addEventListener('click', () => {
-            const payload = { [globalKey]: { volume: parseInt(volSlider.value, 10), speed: parseInt(speedSlider.value, 10) } };
-            chrome.storage.local.remove([tabKey, domainKey], () => {
-                chrome.storage.local.set(payload, updateSaveUI);
-            });
+            chrome.storage.local.remove([tabKey, domainKey, globalKey], updateSaveUI);
         });
     });
 });
