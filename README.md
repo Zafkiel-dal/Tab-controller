@@ -12,7 +12,14 @@ I was tired of browser limitations, so I built this to do a few specific things:
 - **On-Video Controls**: Instead of clicking the extension icon every time, a small badge appears right on the video player. You can tweak everything from there.
 - **It’s Light & Dark**: If you prefer dark mode, it looks great. If you're a fan of light mode, there's a toggle for that too.
 
-## Getting Started
+## Downloads
+
+| Browser | Link |
+| :--- | :--- |
+| <img src="https://raw.githubusercontent.com/alrra/browser-logos/master/src/chrome/chrome_16x16.png" width="16" height="16" /> **Chrome / Edge** | [Install from Chrome Web Store]('__') |
+| <img src="https://raw.githubusercontent.com/alrra/browser-logos/master/src/firefox/firefox_16x16.png" width="16" height="16" /> **Firefox** | [Install from Firefox Add-ons]('https://addons.mozilla.org/en-US/firefox/addon/media-controller_ets/') |
+
+## Getting Started (Local Development)
 
 1. Download or clone this folder.
 2. Open Chrome (or any Chromium browser like Edge/Brave) and go to `chrome://extensions/`.
