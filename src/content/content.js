@@ -12,7 +12,7 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
         currentSpeed: 1.0,
         overlays: new WeakMap()
     };
-    
+
     const hookedMedia = new WeakSet();
 
     function initAudio() {
@@ -44,8 +44,14 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
 
     // ── Overlay Widget ──────────────────────────────────────────────────
 
-    // Sites where TikTok-style layering blocks normal absolute positioning
-    const FIXED_OVERLAY_HOSTNAMES = ['www.tiktok.com', 'tiktok.com'];
+    // Sites where TikTok-style layering blocks normal absolute positioning,
+    // OR where videos live inside Shadow DOMs making container lookup impossible.
+    const FIXED_OVERLAY_HOSTNAMES = [
+        'www.tiktok.com', 'tiktok.com',
+        'www.reddit.com', 'reddit.com', 'old.reddit.com', 'sh.reddit.com',
+        'www.facebook.com', 'facebook.com', 'web.facebook.com',
+        'm.youtube.com'
+    ];
 
     function needsFixedOverlay() {
         const host = window.location.hostname;
@@ -85,6 +91,7 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
                 transition: opacity 0.3s ease, background 0.3s ease, transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
                 pointer-events: auto; /* ...but capture clicks on the badge itself */
                 -webkit-tap-highlight-color: transparent;
+                touch-action: none; /* Prevent scrolling when dragging the badge */
                 z-index: 2147483647 !important; /* Reinforce z-index */
             }
 
@@ -281,14 +288,18 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
     function createOverlayForVideo(video) {
         const existing = state.overlays.get(video);
         if (existing) {
-            // Re-attach if it was removed by the site's own DOM cleanup (frequent on YouTube)
-            if (!document.contains(existing.host)) {
-                positionOverlay(video, existing.host);
+            const h = existing.host;
+            // Re-attach if the host was removed from DOM entirely, OR if its parent
+            // container was recycled (Facebook Reels swaps containers without removing video).
+            const hostDetached = !document.contains(h) || !h.parentElement;
+            if (hostDetached) {
+                positionOverlay(video, h);
             }
             return;
         }
 
         const host = createEl('div', '__mc-overlay-host');
+        host.__mcVideo = video; // Store reference to video for cleanup
         const isFixed = needsFixedOverlay();
         host.dataset.mcFixed = isFixed ? '1' : '0';
         if (isFixed) {
@@ -660,12 +671,14 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
                     badge.releasePointerCapture(e.pointerId);
                 }
 
-                ['mousemove', 'pointermove', 'touchmove'].forEach(evt => document.removeEventListener(evt, onMove, true));
-                ['mouseup', 'pointerup', 'pointercancel', 'touchend', 'touchcancel'].forEach(evt => document.removeEventListener(evt, onUp, true));
+                const passiveFalse = { capture: true, passive: false };
+                ['mousemove', 'pointermove', 'touchmove'].forEach(evt => document.removeEventListener(evt, onMove, passiveFalse));
+                ['mouseup', 'pointerup', 'pointercancel', 'touchend', 'touchcancel'].forEach(evt => document.removeEventListener(evt, onUp, passiveFalse));
             };
 
-            ['mousemove', 'pointermove', 'touchmove'].forEach(evt => document.addEventListener(evt, onMove, true));
-            ['mouseup', 'pointerup', 'pointercancel', 'touchend', 'touchcancel'].forEach(evt => document.addEventListener(evt, onUp, true));
+            const passiveFalse = { capture: true, passive: false };
+            ['mousemove', 'pointermove', 'touchmove'].forEach(evt => document.addEventListener(evt, onMove, passiveFalse));
+            ['mouseup', 'pointerup', 'pointercancel', 'touchend', 'touchcancel'].forEach(evt => document.addEventListener(evt, onUp, passiveFalse));
         }
 
         const canStartDragFromTarget = (target) => {
@@ -715,8 +728,23 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
         ].forEach(evt => badge.addEventListener(evt, (e) => e.stopPropagation(), false)); // false = bubble phase
         badge.addEventListener('dragstart', (e) => { e.preventDefault(); e.stopPropagation(); }, false);
 
-        // Position and insert
-        positionOverlay(video, host);
+        // Position and insert — retry a few times to handle Facebook's lazy container rendering.
+        // Facebook Reels can add the <video> before its player wrapper is positioned/sized,
+        // so the first positionOverlay call may attach to a still-unstyled parent.
+        let attachAttempts = 0;
+        const tryAttach = () => {
+            positionOverlay(video, host);
+            attachAttempts++;
+            // Check if we actually got inserted into a valid container
+            const inDom = document.contains(host);
+            if (!inDom && attachAttempts < 4) {
+                setTimeout(tryAttach, 200);
+            } else if (inDom) {
+                // Trigger a re-center after the layout has settled
+                setTimeout(anchorBadgeToTopCenter, 50);
+            }
+        };
+        tryAttach();
         state.overlays.set(video, { host, syncDisplay });
     }
 
@@ -729,6 +757,19 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
             // which is required for TikTok Live whose UI layers block normal z-index.
             document.body.appendChild(host);
             syncFixedHostToVideo(video, host);
+
+            // Support Fullscreen: if video's parent goes fullscreen, we must reparent
+            // the host to the fullscreen element, otherwise document.body's children are hidden.
+            const adjustFullscreenParent = () => {
+                const fsNode = document.fullscreenElement || document.webkitFullscreenElement;
+                if (fsNode && host.parentElement !== fsNode) {
+                    fsNode.appendChild(host);
+                } else if (!fsNode && host.parentElement !== document.body) {
+                    document.body.appendChild(host);
+                }
+            };
+            document.addEventListener('fullscreenchange', adjustFullscreenParent);
+            document.addEventListener('webkitfullscreenchange', adjustFullscreenParent);
 
             // Keep position in sync with video rect when the page changes
             const updatePos = () => syncFixedHostToVideo(video, host);
@@ -746,7 +787,7 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
             }
         } else {
             // ── Absolute mode: classic container-relative positioning (YouTube, FB, etc.) ──
-            let container = video.closest('.html5-video-player, .ytp-player-content, .x1n2onr6, ._video_wrapper, .video-container, ytd-reel-video-renderer, .bpx-player-video-area');
+            let container = video.closest('.html5-video-player, .ytp-player-content, .x1n2onr6, ._video_wrapper, .video-container, ytd-reel-video-renderer, .bpx-player-video-area, shreddit-player, shreddit-post');
 
             if (!container) {
                 let curr = video.parentElement;
@@ -777,11 +818,64 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
 
     function syncFixedHostToVideo(video, host) {
         const r = video.getBoundingClientRect();
-        if (r.width === 0 && r.height === 0) return; // video not visible yet
-        host.style.left   = r.left   + 'px';
-        host.style.top    = r.top    + 'px';
-        host.style.width  = r.width  + 'px';
+        const computedStyle = window.getComputedStyle(video);
+
+        // Hide overlay if the video is no longer visible (e.g. background video when theater mode opens)
+        if (r.width === 0 || r.height === 0 || 
+            computedStyle.visibility === 'hidden' || 
+            computedStyle.display === 'none' ||
+            computedStyle.opacity === '0') {
+            host.style.display = 'none';
+            return;
+        }
+
+        host.style.display = ''; // Restore display
+        host.style.left = r.left + 'px';
+        host.style.top = r.top + 'px';
+        host.style.width = r.width + 'px';
         host.style.height = r.height + 'px';
+    }
+
+    // Recursively collect all video/audio elements, including those nested inside Shadow DOMs.
+    // Reddit (shreddit-player) and other custom elements use Shadow DOM to host video tags.
+    function deepQueryMediaAll(root) {
+        const results = [];
+        const walk = (node) => {
+            if (!node) return;
+            // Check the node itself
+            if (node.nodeName === 'VIDEO' || node.nodeName === 'AUDIO') {
+                results.push(node);
+            }
+            // Descend into shadow root if present
+            if (node.shadowRoot) {
+                walk(node.shadowRoot);
+            }
+            // Walk children
+            const children = node.children || node.querySelectorAll('*') || [];
+            for (let i = 0; i < children.length; i++) {
+                walk(children[i]);
+            }
+        };
+        // Use querySelectorAll for speed on the main document, then shadow-pierce for custom elements
+        const flatList = root.querySelectorAll ? Array.from(root.querySelectorAll('video, audio')) : [];
+        flatList.forEach(el => results.push(el));
+        // Also deep-walk to pierce Shadow DOMs not reachable by querySelectorAll
+        const allElements = root.querySelectorAll ? Array.from(root.querySelectorAll('*')) : [];
+        allElements.forEach(el => {
+            if (el.shadowRoot) {
+                const inner = el.shadowRoot.querySelectorAll('video, audio');
+                inner.forEach(m => { if (!results.includes(m)) results.push(m); });
+                // Double-depth: custom elements inside shadow roots that also have shadow roots
+                el.shadowRoot.querySelectorAll('*').forEach(innerEl => {
+                    if (innerEl.shadowRoot) {
+                        innerEl.shadowRoot.querySelectorAll('video, audio').forEach(m => {
+                            if (!results.includes(m)) results.push(m);
+                        });
+                    }
+                });
+            }
+        });
+        return results;
     }
 
     function applyVolume() {
@@ -795,7 +889,7 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
                 0.05
             );
         } else {
-            document.querySelectorAll('video, audio').forEach(media => {
+            deepQueryMediaAll(document).forEach(media => {
                 media.volume = Math.min(1.0, state.currentVolume);
             });
         }
@@ -804,7 +898,7 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
     }
 
     function applySpeed() {
-        document.querySelectorAll('video, audio').forEach(media => {
+        deepQueryMediaAll(document).forEach(media => {
             media.playbackRate = state.currentSpeed;
         });
 
@@ -812,8 +906,9 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
     }
 
     function syncAllOverlays() {
-        document.querySelectorAll('video').forEach(video => {
-            const overlay = state.overlays.get(video);
+        deepQueryMediaAll(document).forEach(media => {
+            if (media.tagName !== 'VIDEO') return;
+            const overlay = state.overlays.get(media);
             if (overlay) overlay.syncDisplay();
         });
     }
@@ -841,7 +936,36 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
     }
 
     function hookMediaElements() {
-        document.querySelectorAll('video, audio').forEach(media => {
+        // --- Global cleanup for orphaned overlays ---
+        // If a video element is completely removed from the DOM, its overlay host
+        // might remain in the body (especially in fixed mode). We must clean them up.
+        document.querySelectorAll('.__mc-overlay-host').forEach(host => {
+            if (host.__mcVideo && !document.contains(host.__mcVideo)) {
+                try { host.remove(); } catch (e) {}
+            }
+        });
+
+        deepQueryMediaAll(document).forEach(media => {
+            // --- Stale overlay recovery ---
+            // Facebook Reels recycles video elements: the same <video> DOM node gets
+            // reused with a new src and a new surrounding container. When that happens
+            // the old overlay host is still tracked in state.overlays but its parent
+            // element has been detached. Detect this and clear the stale record so a
+            // fresh overlay is created for the new container.
+            if (hookedMedia.has(media) && media.tagName === 'VIDEO') {
+                const existing = state.overlays.get(media);
+                if (existing) {
+                    const h = existing.host;
+                    const stale = !document.contains(h) || !h.parentElement;
+                    if (stale) {
+                        // Remove the orphaned host from DOM if it somehow still exists
+                        try { h.parentElement && h.parentElement.removeChild(h); } catch (_) { }
+                        state.overlays.delete(media);
+                        hookedMedia.delete(media); // allow re-hooking
+                    }
+                }
+            }
+
             // Prevent duplicate listeners by tracking object reference directly (handles cloned DOM nodes)
             if (hookedMedia.has(media)) return;
             hookedMedia.add(media);
@@ -931,6 +1055,37 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
         return true;
     });
 
+    // Custom elements that use Shadow DOM for their video player (e.g. Reddit's shreddit-player).
+    // We watch for these being added to the DOM, then observe their shadow root too.
+    const SHADOW_HOST_TAGS = new Set(['SHREDDIT-PLAYER', 'SHREDDIT-POST', 'SHREDDIT-ASYNC-LOADER']);
+
+    // Attach a MutationObserver to a shadow root so we pick up videos added inside it.
+    const observedShadowRoots = new WeakSet();
+    function observeShadowRoot(shadowRoot) {
+        if (!shadowRoot || observedShadowRoots.has(shadowRoot)) return;
+        observedShadowRoots.add(shadowRoot);
+        const shadowObs = new MutationObserver((mutations) => {
+            let shouldHook = false;
+            for (const mutation of mutations) {
+                for (const node of mutation.addedNodes) {
+                    if (node.nodeName === 'VIDEO' || node.nodeName === 'AUDIO') {
+                        shouldHook = true; break;
+                    }
+                    if (node.querySelectorAll && node.querySelectorAll('video, audio').length > 0) {
+                        shouldHook = true; break;
+                    }
+                    if (node.shadowRoot) {
+                        observeShadowRoot(node.shadowRoot);
+                        shouldHook = true;
+                    }
+                }
+                if (shouldHook) break;
+            }
+            if (shouldHook) hookMediaElements();
+        });
+        shadowObs.observe(shadowRoot, { childList: true, subtree: true });
+    }
+
     // Watch for dynamically added media elements (SPAs like IG/Bilibili replace elements often)
     const observer = new MutationObserver((mutations) => {
         let shouldHook = false;
@@ -944,6 +1099,19 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
                     shouldHook = true;
                     break;
                 }
+                // Watch custom elements that render video inside Shadow DOM (e.g. Reddit)
+                if (node.nodeType === 1 && SHADOW_HOST_TAGS.has(node.nodeName)) {
+                    // Shadow root may not be attached yet; poll briefly
+                    const tryObserveShadow = (attempts) => {
+                        if (node.shadowRoot) {
+                            observeShadowRoot(node.shadowRoot);
+                            hookMediaElements();
+                        } else if (attempts > 0) {
+                            setTimeout(() => tryObserveShadow(attempts - 1), 80);
+                        }
+                    };
+                    tryObserveShadow(10);
+                }
             }
             if (shouldHook) break;
         }
@@ -956,6 +1124,13 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
     observer.observe(document.body || document.documentElement, {
         childList: true,
         subtree: true
+    });
+
+    // Observe any shadow roots that already exist on page load (Reddit pre-renders some elements)
+    document.querySelectorAll('*').forEach(el => {
+        if (el.shadowRoot && SHADOW_HOST_TAGS.has(el.nodeName)) {
+            observeShadowRoot(el.shadowRoot);
+        }
     });
 
     // Request session preset from background memory.
@@ -985,4 +1160,25 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
             setTimeout(fetchAndApplyPreset, 100);
         }
     }).observe(document.body || document.documentElement, { subtree: true, childList: true });
+
+    // ── Safety net: play-event hook + periodic scan ───────────────────────────
+    // Facebook (and some other SPAs) add <video> elements asynchronously after
+    // document_end, sometimes in timing gaps that MutationObserver misses.
+    //
+    // 1. Capture-phase 'play' listener — when ANY video plays, re-run hookMediaElements.
+    //    This guarantees the playing video gets an overlay even if we missed its insertion.
+    document.addEventListener('play', (e) => {
+        if (e.target && (e.target.tagName === 'VIDEO' || e.target.tagName === 'AUDIO')) {
+            hookMediaElements();
+        }
+    }, { capture: true, passive: true });
+
+    // 2. Periodic scan for the first 30 seconds after injection (12 × 2.5 s).
+    //    Facebook's lazy hydration can delay video insertion well past document_end.
+    let periodicScanCount = 0;
+    const periodicScan = setInterval(() => {
+        hookMediaElements();
+        periodicScanCount++;
+        if (periodicScanCount >= 12) clearInterval(periodicScan);
+    }, 2500);
 }
