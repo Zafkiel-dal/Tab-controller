@@ -897,9 +897,17 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
         syncAllOverlays();
     }
 
+    // _applyingSpeedSet: WeakSet of media elements currently being updated by extension,
+    // used to suppress the external-sync handler during our own writes.
+    const _applyingSpeedSet = new WeakSet();
+
     function applySpeed() {
         deepQueryMediaAll(document).forEach(media => {
+            _applyingSpeedSet.add(media);
             media.playbackRate = state.currentSpeed;
+            // The ratechange event fires synchronously in most browsers,
+            // so clear the guard in a microtask to be safe.
+            Promise.resolve().then(() => _applyingSpeedSet.delete(media));
         });
 
         syncAllOverlays();
@@ -970,16 +978,28 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
             if (hookedMedia.has(media)) return;
             hookedMedia.add(media);
 
-            const enforceState = () => {
-                if (Math.abs(media.playbackRate - state.currentSpeed) > 0.05) {
-                    media.playbackRate = state.currentSpeed;
+            const syncFromExternal = () => {
+                if (_applyingSpeedSet.has(media)) return; // extension set this — ignore
+                const newRate = media.playbackRate;
+                if (Math.abs(newRate - state.currentSpeed) > 0.05) {
+                    // External source (e.g. YouTube UI) changed speed — adopt it
+                    state.currentSpeed = newRate;
+                    persistState();
+                    syncAllOverlays();
                 }
             };
 
-            // Aggressive strict adherence to extension state
-            media.addEventListener('ratechange', enforceState);
-            media.addEventListener('loadeddata', enforceState);
-            media.addEventListener('play', enforceState);
+            // Re-apply extension speed when a new video loads or playback resumes,
+            // guarded so it doesn't loop with syncFromExternal.
+            const reApplySpeed = () => {
+                _applyingSpeedSet.add(media);
+                media.playbackRate = state.currentSpeed;
+                Promise.resolve().then(() => _applyingSpeedSet.delete(media));
+            };
+
+            media.addEventListener('ratechange', syncFromExternal);
+            media.addEventListener('loadeddata', reApplySpeed);
+            media.addEventListener('play', reApplySpeed);
             media.addEventListener('loadstart', () => {
                 // Re-fetch preset whenever a new clip/source starts loading.
                 // This makes Default mode reset on each clip change even when URL does not change.
