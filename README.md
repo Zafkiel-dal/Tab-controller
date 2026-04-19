@@ -6,7 +6,7 @@ Hey there! This is a simple browser extension I put together to give you more co
 
 | Browser | Link |
 | :--- | :--- |
-| <img src="https://raw.githubusercontent.com/alrra/browser-logos/master/src/chrome/chrome_16x16.png" width="16" height="16" /> **Chrome / Edge** | [Install from Chrome Web Store](https://chrome.google.com/webstore/detail/...) |
+| <img src="https://raw.githubusercontent.com/alrra/browser-logos/master/src/chrome/chrome_16x16.png" width="16" height="16" /> **Chrome / Edge** | [Install from Chrome Web Store](https://chromewebstore.google.com/detail/volume-booster-video-spee/mimbgeljdhgcmenoplikfeeicimfjjai) |
 | <img src="https://raw.githubusercontent.com/alrra/browser-logos/master/src/firefox/firefox_16x16.png" width="16" height="16" /> **Firefox** | [Install from Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/media-controller_ets/) |
 
 
