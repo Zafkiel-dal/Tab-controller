@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Page 1 - Multi Video & Shadow DOM</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 40px;
+            background: #1a1a1a;
+            color: #fff;
+            font-family: sans-serif;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        .video-box {
+            margin-bottom: 40px;
+            background: #2a2a2a;
+            padding: 10px;
+            border-radius: 12px;
+        }
+
+        video {
+            width: 100%;
+            border-radius: 8px;
+            background: #000;
+        }
+
+        h2 {
+            margin-top: 0;
+            color: #a6e3a1;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 2px 8px;
+            background: #fab387;
+            color: #111;
+            border-radius: 4px;
+            font-size: 12px;
+            margin-left: 10px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>Extension Test Environment</h1>
+
+        <div class="video-box">
+            <h2>Video 1 (Primary)</h2>
+            <video id="video1" controls
+                src="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"
+                crossorigin="anonymous"></video>
+        </div>
+
+        <div class="video-box">
+            <h2>Video 2 (Secondary)</h2>
+            <video id="video2" controls
+                src="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4"
+                crossorigin="anonymous"></video>
+        </div>
+
+        <!-- NEW: Shadow DOM Test Case -->
+        <div class="video-box">
+            <h2>Video 3 <span class="badge">Inside Shadow DOM</span></h2>
+            <div id="shadowHost"></div>
+        </div>
+    </div>
+
+    <script>
+        // Create a Shadow DOM host to simulate sites like Reddit
+        const host = document.getElementById('shadowHost');
+        const shadow = host.attachShadow({ mode: 'open' }); // We use open for testing, extension supports both
+
+        const container = document.createElement('div');
+        container.className = 'video-container';
+        container.innerHTML = `
+            <video id="shadowVideo" controls src="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyrides.mp4" crossorigin="anonymous"></video>
+        `;
+
+        // Inherit styles
+        const style = document.createElement('style');
+        style.textContent = `
+            video { width: 100%; border-radius: 8px; background: #000; }
+        `;
+
+        shadow.appendChild(style);
+        shadow.appendChild(container);
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,24 @@
+{
+  "name": "media-extensions",
+  "version": "1.5",
+  "description": "This is a simple browser extension I put together to give you more control over your browser's audio and video. If you've ever felt like a video was too quiet even at 100%, or if you wanted to fly through a long lecture without clicking menus, this is for you.",
+  "main": "index.js",
+  "devDependencies": {
+    "puppeteer": "^24.42.0"
+  },
+  "scripts": {
+    "test": "node tests/test.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Zafkiel-dal/Tab-controller.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/Zafkiel-dal/Tab-controller/issues"
+  },
+  "homepage": "https://github.com/Zafkiel-dal/Tab-controller#readme"
+}

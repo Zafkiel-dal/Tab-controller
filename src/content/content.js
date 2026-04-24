@@ -10,6 +10,7 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
         mediaSources: new WeakMap(),
         currentVolume: 1.0,
         currentSpeed: 1.0,
+        activeMode: 'none',
         overlays: new WeakMap()
     };
 
@@ -147,9 +148,10 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
 
             .mc-speed-val { color: #a6e3a1; } 
             .mc-vol-val   { color: #89b4fa; }
+            .mc-save-val  { color: #fab387; }
 
-            /* ── Popovers (Speed/Vol/Eye) ── */
-            .mc-spd-pop, .mc-vol-pop, .mc-eye-pop {
+            /* ── Popovers (Speed/Vol/Eye/Save) ── */
+            .mc-spd-pop, .mc-vol-pop, .mc-eye-pop, .mc-save-pop {
                 position: absolute;
                 top: calc(100% - 2px); /* Slight overlap to maintain hover */
                 left: 50%;
@@ -171,7 +173,7 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
             }
 
             /* Transparent bridge to prevent losing hover in the gap */
-            .mc-spd-pop::before, .mc-vol-pop::before, .mc-eye-pop::before {
+            .mc-spd-pop::before, .mc-vol-pop::before, .mc-eye-pop::before, .mc-save-pop::before {
                 content: "";
                 position: absolute;
                 top: -10px;
@@ -181,8 +183,8 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
                 background: transparent;
             }
 
-            .mc-zone:hover .mc-spd-pop, .mc-zone:hover .mc-vol-pop, .mc-zone:hover .mc-eye-pop,
-            .mc-zone.mc-open .mc-spd-pop, .mc-zone.mc-open .mc-vol-pop, .mc-zone.mc-open .mc-eye-pop {
+            .mc-zone:hover .mc-spd-pop, .mc-zone:hover .mc-vol-pop, .mc-zone:hover .mc-eye-pop, .mc-zone:hover .mc-save-pop,
+            .mc-zone.mc-open .mc-spd-pop, .mc-zone.mc-open .mc-vol-pop, .mc-zone.mc-open .mc-eye-pop, .mc-zone.mc-open .mc-save-pop {
                 opacity: 1;
                 pointer-events: auto;
                 transform: translateX(-50%) scale(1);
@@ -208,6 +210,16 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
 
             .mc-sbtn:hover { background: rgba(166, 227, 161, 0.2); color: #a6e3a1; }
             .mc-sbtn:active { transform: scale(0.92); }
+
+            .mc-sbtn-t:hover { background: rgba(180, 190, 254, 0.2); color: #b4befe; }
+            .mc-sbtn-d:hover { background: rgba(250, 179, 135, 0.2); color: #fab387; }
+            .mc-sbtn-g:hover { background: rgba(166, 227, 161, 0.2); color: #a6e3a1; }
+            .mc-sbtn-c:hover { background: rgba(243, 139, 168, 0.2); color: #f38ba8; }
+
+            .mc-sbtn.mc-active {
+                background: rgba(255, 255, 255, 0.15);
+                box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.2);
+            }
 
             .mc-vslider {
                 -webkit-appearance: none;
@@ -308,7 +320,7 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
             host.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:2147483647;';
         }
 
-        const shadow = host.attachShadow({ mode: 'closed' });
+        const shadow = host.attachShadow({ mode: 'open' });//'closed'
         const styleEl = createEl('style', '', buildOverlayStyles(isFixed));
         shadow.appendChild(styleEl);
 
@@ -369,6 +381,45 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
 
         eyePop.append(eyeSlider, eyePct);
         eyeZone.append(eyeIcon, eyePop);
+
+        // ── Mode/Save Zone ──
+        const saveZone = createEl('div', 'mc-zone mc-zone-save');
+        const saveIcon = createEl('span', 'mc-label');
+        saveIcon.appendChild(createSvgIcon({
+            width: 13,
+            height: 13,
+            viewBox: '0 0 24 24',
+            children: [
+                { tag: 'path', attrs: { d: 'm19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z' } }
+            ]
+        })); // SVG bookmark icon
+
+        const savePop = createEl('div', 'mc-save-pop');
+        const btnTab = createEl('button', 'mc-sbtn mc-sbtn-t', 'T', { title: 'Lock to Tab' });
+        const btnDom = createEl('button', 'mc-sbtn mc-sbtn-d', 'D', { title: 'Lock to Domain' });
+        const btnGlo = createEl('button', 'mc-sbtn mc-sbtn-g', 'G', { title: 'Lock Globally' });
+        const btnClr = createEl('button', 'mc-sbtn mc-sbtn-c', '✕', { title: 'Clear Preset' });
+
+        const setOverlayMode = (mode) => {
+            chrome.runtime.sendMessage({
+                action: 'setMode',
+                mode: mode,
+                volume: Math.round(state.currentVolume * 100),
+                speed: Math.round(state.currentSpeed * SPEED_SCALE)
+            }, () => {
+                // Background might have updated state during fetchAndApplyPreset, 
+                // so we re-fetch to stay in sync.
+                fetchAndApplyPreset();
+            });
+        };
+
+        btnTab.onclick = (e) => { e.stopPropagation(); setOverlayMode('tab'); };
+        btnDom.onclick = (e) => { e.stopPropagation(); setOverlayMode('domain'); };
+        btnGlo.onclick = (e) => { e.stopPropagation(); setOverlayMode('global'); };
+        btnClr.onclick = (e) => { e.stopPropagation(); setOverlayMode('clear'); };
+
+        savePop.append(btnTab, btnDom, btnGlo, btnClr);
+        saveZone.append(saveIcon, savePop);
 
         // ── Reset Zone ──
         const resetZone = createEl('div', 'mc-zone mc-zone-reset');
@@ -436,8 +487,9 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
         badge.appendChild(speedZone);
         badge.appendChild(sep);
         badge.appendChild(volZone);
-        badge.appendChild(eyeZone);
         badge.appendChild(resetZone);
+        badge.appendChild(saveZone);
+        badge.appendChild(eyeZone);
         shadow.appendChild(badge);
 
         // ── Sync helper ──
@@ -449,6 +501,12 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
             volLabel.textContent = volPercent + '%';
             volSlider.value = volPercent;
             volPct.textContent = volPercent + '%';
+
+            // Check active preset mode for highlighting
+            [btnTab, btnDom, btnGlo].forEach(b => b.classList.remove('mc-active'));
+            if (state.activeMode === 'tab') btnTab.classList.add('mc-active');
+            else if (state.activeMode === 'domain') btnDom.classList.add('mc-active');
+            else if (state.activeMode === 'global') btnGlo.classList.add('mc-active');
         }
 
         // ── Speed buttons ──
@@ -547,6 +605,7 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
             { zone: speedZone, key: 'speed' },
             { zone: volZone, key: 'vol' },
             { zone: eyeZone, key: 'eye' },
+            { zone: saveZone, key: 'save' },
         ];
 
         function closeAllPops(exceptKey) {
@@ -683,7 +742,7 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
 
         const canStartDragFromTarget = (target) => {
             if (!target || !target.closest) return true;
-            return !target.closest('.mc-sbtn') && !target.closest('.mc-vslider') && !target.closest('.mc-eye-pop') && !target.closest('.mc-zone-reset');
+            return !target.closest('.mc-sbtn') && !target.closest('.mc-vslider') && !target.closest('.mc-eye-pop') && !target.closest('.mc-save-pop') && !target.closest('.mc-zone-reset');
         };
 
         const anchorBadgeToTopCenter = () => {
@@ -698,9 +757,22 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
 
         // Ensure centered placement after render and whenever layout changes.
         setTimeout(anchorBadgeToTopCenter, 0);
-        window.addEventListener('resize', () => {
-            if (!manuallyMoved) anchorBadgeToTopCenter();
+
+        const resizeObserver = new ResizeObserver(() => {
+            if (!manuallyMoved) {
+                anchorBadgeToTopCenter();
+            } else {
+                // If the player shrinks and the badge is now out of bounds, push it back in.
+                const clamped = clampBadgePosition(badgeX, badgeY);
+                if (clamped.x !== badgeX || clamped.y !== badgeY) {
+                    badgeX = clamped.x;
+                    badgeY = clamped.y;
+                    badge.style.left = badgeX + 'px';
+                    badge.style.top = badgeY + 'px';
+                }
+            }
         });
+        resizeObserver.observe(host);
 
         badge.addEventListener('pointerdown', (e) => {
             // Only handle primary button or touch
@@ -779,9 +851,16 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
             if (typeof ResizeObserver !== 'undefined') {
                 const ro = new ResizeObserver(updatePos);
                 ro.observe(video);
-                // Disconnect when host is removed from DOM
+                // Disconnect all listeners when host is removed from DOM
                 const mo = new MutationObserver(() => {
-                    if (!document.contains(host)) { ro.disconnect(); mo.disconnect(); }
+                    if (!document.contains(host)) {
+                        ro.disconnect();
+                        mo.disconnect();
+                        window.removeEventListener('scroll', updatePos, { capture: true });
+                        window.removeEventListener('resize', updatePos);
+                        document.removeEventListener('fullscreenchange', adjustFullscreenParent);
+                        document.removeEventListener('webkitfullscreenchange', adjustFullscreenParent);
+                    }
                 });
                 mo.observe(document.body, { childList: true, subtree: false });
             }
@@ -821,8 +900,8 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
         const computedStyle = window.getComputedStyle(video);
 
         // Hide overlay if the video is no longer visible (e.g. background video when theater mode opens)
-        if (r.width === 0 || r.height === 0 || 
-            computedStyle.visibility === 'hidden' || 
+        if (r.width === 0 || r.height === 0 ||
+            computedStyle.visibility === 'hidden' ||
             computedStyle.display === 'none' ||
             computedStyle.opacity === '0') {
             host.style.display = 'none';
@@ -839,43 +918,25 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
     // Recursively collect all video/audio elements, including those nested inside Shadow DOMs.
     // Reddit (shreddit-player) and other custom elements use Shadow DOM to host video tags.
     function deepQueryMediaAll(root) {
-        const results = [];
-        const walk = (node) => {
-            if (!node) return;
-            // Check the node itself
-            if (node.nodeName === 'VIDEO' || node.nodeName === 'AUDIO') {
-                results.push(node);
-            }
-            // Descend into shadow root if present
-            if (node.shadowRoot) {
-                walk(node.shadowRoot);
-            }
-            // Walk children
-            const children = node.children || node.querySelectorAll('*') || [];
-            for (let i = 0; i < children.length; i++) {
-                walk(children[i]);
-            }
-        };
-        // Use querySelectorAll for speed on the main document, then shadow-pierce for custom elements
+        const seen = new Set();
+        // Fast path: querySelectorAll on the main document
         const flatList = root.querySelectorAll ? Array.from(root.querySelectorAll('video, audio')) : [];
-        flatList.forEach(el => results.push(el));
-        // Also deep-walk to pierce Shadow DOMs not reachable by querySelectorAll
+        flatList.forEach(el => seen.add(el));
+        // Deep-walk to pierce Shadow DOMs not reachable by querySelectorAll
         const allElements = root.querySelectorAll ? Array.from(root.querySelectorAll('*')) : [];
         allElements.forEach(el => {
             if (el.shadowRoot) {
                 const inner = el.shadowRoot.querySelectorAll('video, audio');
-                inner.forEach(m => { if (!results.includes(m)) results.push(m); });
+                inner.forEach(m => seen.add(m));
                 // Double-depth: custom elements inside shadow roots that also have shadow roots
                 el.shadowRoot.querySelectorAll('*').forEach(innerEl => {
                     if (innerEl.shadowRoot) {
-                        innerEl.shadowRoot.querySelectorAll('video, audio').forEach(m => {
-                            if (!results.includes(m)) results.push(m);
-                        });
+                        innerEl.shadowRoot.querySelectorAll('video, audio').forEach(m => seen.add(m));
                     }
                 });
             }
         });
-        return results;
+        return Array.from(seen);
     }
 
     function applyVolume() {
@@ -901,6 +962,11 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
     // used to suppress the external-sync handler during our own writes.
     const _applyingSpeedSet = new WeakSet();
 
+    // _loadingClipSet: WeakSet of media elements currently loading a new clip/source.
+    // Suppresses syncFromExternal during load transitions so that YouTube/sites
+    // resetting playbackRate to 1x doesn't corrupt saved presets.
+    const _loadingClipSet = new WeakSet();
+
     function applySpeed() {
         deepQueryMediaAll(document).forEach(media => {
             _applyingSpeedSet.add(media);
@@ -912,6 +978,12 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
 
         syncAllOverlays();
     }
+
+    // Global guard to protect presets from being overwritten by site auto-resets
+    // during the chaotic first few seconds of page load (e.g., when a video is
+    // opened in a new tab and loadstart fires before the extension hooks it).
+    let _initialLoadGuard = true;
+    setTimeout(() => { _initialLoadGuard = false; }, 3000);
 
     function syncAllOverlays() {
         deepQueryMediaAll(document).forEach(media => {
@@ -949,7 +1021,7 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
         // might remain in the body (especially in fixed mode). We must clean them up.
         document.querySelectorAll('.__mc-overlay-host').forEach(host => {
             if (host.__mcVideo && !document.contains(host.__mcVideo)) {
-                try { host.remove(); } catch (e) {}
+                try { host.remove(); } catch (e) { }
             }
         });
 
@@ -969,7 +1041,10 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
                         // Remove the orphaned host from DOM if it somehow still exists
                         try { h.parentElement && h.parentElement.removeChild(h); } catch (_) { }
                         state.overlays.delete(media);
-                        hookedMedia.delete(media); // allow re-hooking
+                        // Recreate the overlay immediately without removing from hookedMedia.
+                        // Removing from hookedMedia would cause the event listeners below
+                        // to be bound repeatedly to the same <video> element, causing a memory leak.
+                        createOverlayForVideo(media);
                     }
                 }
             }
@@ -980,6 +1055,9 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
 
             const syncFromExternal = () => {
                 if (_applyingSpeedSet.has(media)) return; // extension set this — ignore
+                if (_loadingClipSet.has(media)) return;   // clip loading — ignore site auto-reset
+                if (_initialLoadGuard) return;            // page initial load — ignore site auto-reset
+
                 const newRate = media.playbackRate;
                 if (Math.abs(newRate - state.currentSpeed) > 0.05) {
                     // External source (e.g. YouTube UI) changed speed — adopt it
@@ -1001,9 +1079,17 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
             media.addEventListener('loadeddata', reApplySpeed);
             media.addEventListener('play', reApplySpeed);
             media.addEventListener('loadstart', () => {
+                // Guard MUST be set synchronously before the async fetchAndApplyPreset so that
+                // any ratechange fired by the site during load (e.g. YouTube resetting to 1×)
+                // is suppressed by syncFromExternal for the full load window.
+                _loadingClipSet.add(media);
+
                 // Re-fetch preset whenever a new clip/source starts loading.
-                // This makes Default mode reset on each clip change even when URL does not change.
-                fetchAndApplyPreset();
+                // Pass a callback so the guard is cleared only after the preset
+                // speed has been applied, not via a blind timeout.
+                fetchAndApplyPreset(() => {
+                    _loadingClipSet.delete(media);
+                });
             });
 
             // For lazy-loaded media, wait until it has a src assigned
@@ -1071,6 +1157,9 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
                 volume: Math.round(state.currentVolume * 100),
                 speed: Math.round(state.currentSpeed * SPEED_SCALE)
             });
+        } else if (message.action === 'refreshPreset') {
+            fetchAndApplyPreset();
+            sendResponse({ success: true });
         }
         return true;
     });
@@ -1119,15 +1208,17 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
                     shouldHook = true;
                     break;
                 }
-                // Watch custom elements that render video inside Shadow DOM (e.g. Reddit)
-                if (node.nodeType === 1 && SHADOW_HOST_TAGS.has(node.nodeName)) {
-                    // Shadow root may not be attached yet; poll briefly
+                // Universal Shadow DOM detection:
+                // Check if the node itself has a shadow root or if it's a potential host (custom element)
+                // IMPORTANT: Skip our own overlay host to prevent infinite recursion/redundant scans
+                if (node.nodeType === 1 && !node.classList.contains('__mc-overlay-host') && 
+                    (node.shadowRoot || node.nodeName.includes('-') || SHADOW_HOST_TAGS.has(node.nodeName))) {
                     const tryObserveShadow = (attempts) => {
                         if (node.shadowRoot) {
                             observeShadowRoot(node.shadowRoot);
                             hookMediaElements();
                         } else if (attempts > 0) {
-                            setTimeout(() => tryObserveShadow(attempts - 1), 80);
+                            setTimeout(() => tryObserveShadow(attempts - 1), 100);
                         }
                     };
                     tryObserveShadow(10);
@@ -1155,13 +1246,36 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
 
     // Request session preset from background memory.
     const currentDomain = window.location.hostname;
-    function fetchAndApplyPreset() {
+    function fetchAndApplyPreset(onDone) {
+        // Safety: ensure onDone is always called, even if the message fails.
+        let settled = false;
+        const settle = () => {
+            if (!settled) {
+                settled = true;
+                if (typeof onDone === 'function') onDone();
+            }
+        };
+        const safetyTimer = setTimeout(settle, 4000);
+
         chrome.runtime.sendMessage({ action: 'requestInitialState', domain: currentDomain }, (response) => {
-            if (!response) return;
+            clearTimeout(safetyTimer);
+            if (!response) { settle(); return; }
+            if (response.mode !== undefined) state.activeMode = response.mode;
             if (response.volume !== undefined) state.currentVolume = response.volume / 100;
             if (response.speed !== undefined) state.currentSpeed = response.speed / SPEED_SCALE;
             applySpeed();
             applyVolume();
+
+            // YouTube's player may override playbackRate after our initial set.
+            // Re-apply a few times with delays to fight back while the
+            // _loadingClipSet guard is still active (suppresses syncFromExternal).
+            // This is done unconditionally to hold the guard for a solid 2000ms.
+            setTimeout(applySpeed, 300);
+            setTimeout(applySpeed, 800);
+            setTimeout(() => {
+                applySpeed();
+                settle();
+            }, 2000);
         });
     }
 
@@ -1176,6 +1290,11 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
         const url = location.href;
         if (url !== lastUrl) {
             lastUrl = url;
+
+            // Re-activate the global initial load shield for SPA navigations
+            _initialLoadGuard = true;
+            setTimeout(() => { _initialLoadGuard = false; }, 3000);
+
             // Delay slightly to ensure new elements have settled.
             setTimeout(fetchAndApplyPreset, 100);
         }

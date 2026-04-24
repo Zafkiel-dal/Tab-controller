@@ -40,7 +40,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnSaveTab = document.getElementById('btnSaveTab');
     const btnSaveDomain = document.getElementById('btnSaveDomain');
     const btnSaveGlobal = document.getElementById('btnSaveGlobal');
-    const btnClearSave = document.getElementById('btnClearSave');
+    const btnClearPreset = document.getElementById('btnClearPreset');
     const saveStatusBadge = document.getElementById('saveStatusBadge');
     const saveInfo = document.getElementById('saveInfo');
 
@@ -203,6 +203,15 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
 
+        // Sync save UI when the overlay changes mode (storage keys change)
+        chrome.storage.onChanged.addListener((changes, areaName) => {
+            if (areaName !== 'local') return;
+            const relevantKeys = [tabKey, domainKey, globalKey];
+            if (relevantKeys.some(k => k in changes)) {
+                updateSaveUI();
+            }
+        });
+
         // Event Listeners
         volSlider.addEventListener('input', (e) => updateVolume(e.target.value, tabId, modeKeys));
         btnVolReset.addEventListener('click', () => updateVolume(100, tabId, modeKeys));
@@ -229,32 +238,61 @@ document.addEventListener('DOMContentLoaded', () => {
                     saveStatusBadge.className = 'save-badge save-badge--domain';
                     saveInfo.textContent = `Locked for all ${domain} pages.`;
                     btnSaveDomain.classList.add('active');
-                } else {
-                    saveStatusBadge.textContent = 'DEFAULT';
+                } else if (result[globalKey]) {
+                    saveStatusBadge.textContent = 'GLOBAL SAVED';
                     saveStatusBadge.className = 'save-badge save-badge--global';
-                    saveInfo.textContent = 'Settings reset to 1.0x for new videos.';
+                    saveInfo.textContent = 'Locked for all sites.';
                     btnSaveGlobal.classList.add('active');
+                } else {
+                    saveStatusBadge.textContent = 'NO PRESET';
+                    saveStatusBadge.className = 'save-badge save-badge--none';
+                    saveInfo.textContent = 'Settings reset to default for new videos.';
                 }
             });
         }
 
+        const notifyOverlay = () => {
+            chrome.tabs.sendMessage(tabId, { action: 'refreshPreset' }).catch(() => {});
+        };
+
         btnSaveTab.addEventListener('click', () => {
+            // Auto-switch: Tab is highest, just save it
             const payload = { [tabKey]: { volume: parseInt(volSlider.value, 10), speed: parseInt(speedSlider.value, 10) } };
-            chrome.storage.local.remove([domainKey, globalKey], () => {
-                chrome.storage.local.set(payload, updateSaveUI);
-            });
+            chrome.storage.local.set(payload, () => { updateSaveUI(); notifyOverlay(); });
         });
 
         btnSaveDomain.addEventListener('click', () => {
             if (!domain) return;
+            // Auto-switch: Clear Tab preset so Domain can take over immediately
             const payload = { [domainKey]: { volume: parseInt(volSlider.value, 10), speed: parseInt(speedSlider.value, 10) } };
-            chrome.storage.local.remove([tabKey, globalKey], () => {
-                chrome.storage.local.set(payload, updateSaveUI);
+            chrome.storage.local.remove([tabKey], () => {
+                chrome.storage.local.set(payload, () => { updateSaveUI(); notifyOverlay(); });
             });
         });
 
         btnSaveGlobal.addEventListener('click', () => {
-            chrome.storage.local.remove([tabKey, domainKey, globalKey], updateSaveUI);
+            // Auto-switch: Clear Tab and Domain presets so Global can take over immediately
+            const payload = { [globalKey]: { volume: parseInt(volSlider.value, 10), speed: parseInt(speedSlider.value, 10) } };
+            chrome.storage.local.remove([tabKey, domainKey], () => {
+                chrome.storage.local.set(payload, () => { updateSaveUI(); notifyOverlay(); });
+            });
+        });
+
+        btnClearPreset.addEventListener('click', () => {
+            // Smart clear: only remove the highest-priority active layer so the page
+            // falls back to the next layer (Tab -> Domain -> Global -> default).
+            chrome.storage.local.get([tabKey, domainKey, globalKey], (result) => {
+                let keyToRemove = null;
+                if (result[tabKey])                    keyToRemove = tabKey;
+                else if (domain && result[domainKey]) keyToRemove = domainKey;
+                else if (result[globalKey])            keyToRemove = globalKey;
+
+                if (keyToRemove) {
+                    chrome.storage.local.remove([keyToRemove], () => { updateSaveUI(); notifyOverlay(); });
+                } else {
+                    updateSaveUI();
+                }
+            });
         });
     });
 });

@@ -16,30 +16,27 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             if (sender.tab.url) domain = new URL(sender.tab.url).hostname;
         } catch (e) { }
 
-        const data = {};
-        if (message.volume !== undefined) data[`tab_volume_${tabId}`] = message.volume;
-        if (message.speed !== undefined) data[`tab_speed_${tabId}`] = message.speed;
-
         const tabKey = `saved_tab_${tabId}`;
         const domainKey = `saved_domain_${domain}`;
         const globalKey = 'saved_global';
 
-        chrome.storage.local.set(data, () => {
-            chrome.storage.local.get([tabKey, domainKey, globalKey], (result) => {
-                const payload = {
-                    volume: message.volume !== undefined ? message.volume : 100,
-                    speed: message.speed !== undefined ? message.speed : 100
-                };
+        // Single read, then single write — avoids race conditions
+        chrome.storage.local.get([tabKey, domainKey, globalKey], (result) => {
+            const payload = {
+                volume: message.volume !== undefined ? message.volume : 100,
+                speed: message.speed !== undefined ? message.speed : 100
+            };
 
-                if (result[tabKey]) {
-                    chrome.storage.local.set({ [tabKey]: payload });
-                } else if (domain && result[domainKey]) {
-                    chrome.storage.local.set({ [domainKey]: payload });
-                } else if (result[globalKey]) {
-                    chrome.storage.local.set({ [globalKey]: payload });
-                }
-                sendResponse({ success: true });
-            });
+            const updates = {};
+            if (message.volume !== undefined) updates[`tab_volume_${tabId}`] = message.volume;
+            if (message.speed !== undefined) updates[`tab_speed_${tabId}`] = message.speed;
+
+            // Sync the active preset in one atomic write
+            if (result[tabKey])              updates[tabKey] = payload;
+            else if (domain && result[domainKey]) updates[domainKey] = payload;
+            else if (result[globalKey])      updates[globalKey] = payload;
+
+            chrome.storage.local.set(updates, () => sendResponse({ success: true }));
         });
         return true;
     }
@@ -63,24 +60,77 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             const hasGlobalPreset = !!result[globalKey];
             const hasActivePreset = hasTabPreset || hasDomainPreset || hasGlobalPreset;
 
+            let activeMode = 'none';
+            if (hasTabPreset) activeMode = 'tab';
+            else if (hasDomainPreset) activeMode = 'domain';
+            else if (hasGlobalPreset) activeMode = 'global';
+
             if (!hasActivePreset) {
                 // Default mode: always reset to baseline and clear per-tab temporary state.
                 chrome.storage.local.remove([liveVolKey, liveSpeedKey], () => {
-                    sendResponse({ volume: 100, speed: 100 });
+                    sendResponse({ volume: 100, speed: 100, mode: activeMode });
                 });
-            } else if (result[liveVolKey] !== undefined && result[liveSpeedKey] !== undefined) {
-                sendResponse({ volume: result[liveVolKey], speed: result[liveSpeedKey] });
-            } else if (result[tabKey]) {
-                sendResponse(result[tabKey]);
-            } else if (domain && result[domainKey]) {
-                sendResponse(result[domainKey]);
-            } else if (result[globalKey]) {
-                sendResponse(result[globalKey]);
+            } else if (hasTabPreset) {
+                // Always use preset values — never the ephemeral live keys when a preset is
+                // active.  The live keys can be polluted by site-driven resets (e.g. YouTube
+                // resetting playbackRate on every new clip) before fetchAndApplyPreset runs.
+                sendResponse({ volume: result[tabKey].volume, speed: result[tabKey].speed, mode: activeMode });
+            } else if (hasDomainPreset) {
+                sendResponse({ volume: result[domainKey].volume, speed: result[domainKey].speed, mode: activeMode });
+            } else if (hasGlobalPreset) {
+                sendResponse({ volume: result[globalKey].volume, speed: result[globalKey].speed, mode: activeMode });
             } else {
                 // Safety fallback: reset to baseline.
-                sendResponse({ volume: 100, speed: 100 });
+                sendResponse({ volume: 100, speed: 100, mode: activeMode });
             }
         });
         return true; // Keep channel open for async response
+    }
+
+    if (message.action === 'setMode') {
+        const tabId = sender.tab.id;
+        let domain = '';
+        try {
+            if (sender.tab.url) domain = new URL(sender.tab.url).hostname;
+        } catch (e) { }
+
+        const tabKey = `saved_tab_${tabId}`;
+        const domainKey = `saved_domain_${domain}`;
+        const globalKey = 'saved_global';
+        const payload = { volume: message.volume, speed: message.speed };
+
+        if (message.mode === 'tab') {
+            // Auto-switch: Tab is highest, no need to clear anything
+            chrome.storage.local.set({ [tabKey]: payload }, () => sendResponse({ success: true }));
+        } else if (message.mode === 'domain' && domain) {
+            // Auto-switch: Clear Tab preset so Domain can take over immediately
+            chrome.storage.local.remove([tabKey], () => {
+                chrome.storage.local.set({ [domainKey]: payload }, () => sendResponse({ success: true }));
+            });
+        } else if (message.mode === 'global') {
+            // Auto-switch: Clear Tab and Domain presets so Global can take over immediately
+            chrome.storage.local.remove([tabKey, domainKey], () => {
+                chrome.storage.local.set({ [globalKey]: payload }, () => sendResponse({ success: true }));
+            });
+        } else if (message.mode === 'clear') {
+            // Smart clear: remove only the highest-priority active layer so the page
+            // falls back to the next layer rather than resetting to defaults.
+            chrome.storage.local.get([tabKey, domainKey, globalKey], (result) => {
+                let keyToRemove = null;
+                if (result[tabKey])                      keyToRemove = tabKey;
+                else if (domain && result[domainKey])    keyToRemove = domainKey;
+                else if (result[globalKey])              keyToRemove = globalKey;
+
+                if (keyToRemove) {
+                    chrome.storage.local.remove([keyToRemove], () => sendResponse({ success: true }));
+                } else {
+                    sendResponse({ success: true });
+                }
+            });
+            return true; // keep async channel open
+        } else {
+            sendResponse({ success: true });
+        }
+        return true;
     }
 });
