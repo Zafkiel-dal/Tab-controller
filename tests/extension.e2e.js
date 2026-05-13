@@ -4,8 +4,8 @@ const fs = require('fs');
 const path = require('path');
 
 const server = http.createServer((req, res) => {
-    let filePath = 'test-page.html';
-    if (req.url === '/page2') filePath = 'test-page-2.html';
+    let filePath = 'multi-video-fixture.html';
+    if (req.url === '/page2') filePath = 'navigation-fixture.html';
     res.writeHead(200, { 'Content-Type': 'text/html' });
     res.end(fs.readFileSync(path.join(__dirname, filePath)));
 });
