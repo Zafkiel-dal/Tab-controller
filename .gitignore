@@ -12,3 +12,7 @@ dist/
 build/
 *.zip
 *.crx
+.agents/
+.cline/
+.clinerules
+memory-bank/

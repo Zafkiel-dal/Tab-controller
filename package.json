@@ -7,6 +7,7 @@
     "puppeteer": "^24.42.0"
   },
   "scripts": {
+    "build:manifests": "node scripts/build-manifests.js",
     "test": "node tests/test.js"
   },
   "repository": {

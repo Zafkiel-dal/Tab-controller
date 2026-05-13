@@ -61,9 +61,23 @@ server.listen(PORT, async () => {
 
             if (!video) return { error: 'Video not found' };
 
-            // Look for overlay host in the same container as video
+            // Fixed overlays are appended to document.body. Content-script expando
+            // properties such as __mcVideo are not visible from Puppeteer's main
+            // world, so match by the visible overlay/video rectangle instead.
             const container = video.parentElement;
-            const host = Array.from(container.querySelectorAll('.__mc-overlay-host')).find(h => h.__mcVideo === video || h.parentElement === container);
+            const videoRect = video.getBoundingClientRect();
+            const rectDistance = (host) => {
+                const hostRect = host.getBoundingClientRect();
+                return Math.abs(hostRect.left - videoRect.left)
+                    + Math.abs(hostRect.top - videoRect.top)
+                    + Math.abs(hostRect.width - videoRect.width)
+                    + Math.abs(hostRect.height - videoRect.height);
+            };
+            const visibleHosts = Array.from(document.querySelectorAll('.__mc-overlay-host'))
+                .filter(h => h.shadowRoot && h.getBoundingClientRect().width > 0 && h.getBoundingClientRect().height > 0)
+                .sort((a, b) => rectDistance(a) - rectDistance(b));
+            const host = visibleHosts[0]
+                || Array.from(container.querySelectorAll('.__mc-overlay-host')).find(h => h.parentElement === container);
 
             const shadow = host ? host.shadowRoot : null;
             if (!shadow) return { error: 'Overlay not found' };
@@ -73,6 +87,102 @@ server.listen(PORT, async () => {
             return { speed, volume };
         }, videoSelector, isInsideShadow);
     }
+
+    async function clickOverlayControl(targetPage, controlSelector, videoSelector = 'video', isInsideShadow = false) {
+        return await targetPage.evaluate((ctrlSel, videoSel, isShadow) => {
+            let video;
+            if (isShadow) {
+                const shadowHost = document.querySelector('#shadowHost');
+                video = shadowHost && shadowHost.shadowRoot ? shadowHost.shadowRoot.querySelector(videoSel) : null;
+            } else {
+                video = document.querySelector(videoSel);
+            }
+
+            if (!video) return { error: 'Video not found' };
+
+            const videoRect = video.getBoundingClientRect();
+            const rectDistance = (host) => {
+                const hostRect = host.getBoundingClientRect();
+                return Math.abs(hostRect.left - videoRect.left)
+                    + Math.abs(hostRect.top - videoRect.top)
+                    + Math.abs(hostRect.width - videoRect.width)
+                    + Math.abs(hostRect.height - videoRect.height);
+            };
+
+            const host = Array.from(document.querySelectorAll('.__mc-overlay-host'))
+                .filter(h => h.shadowRoot && h.getBoundingClientRect().width > 0 && h.getBoundingClientRect().height > 0)
+                .sort((a, b) => rectDistance(a) - rectDistance(b))[0];
+            if (!host || !host.shadowRoot) return { error: 'Overlay not found' };
+
+            const control = host.shadowRoot.querySelector(ctrlSel);
+            if (!control) return { error: `Control not found: ${ctrlSel}` };
+
+            control.click();
+            return { success: true };
+        }, controlSelector, videoSelector, isInsideShadow);
+    }
+
+    async function requireOverlayClick(targetPage, controlSelector, videoSelector = 'video', isInsideShadow = false) {
+        const result = await clickOverlayControl(targetPage, controlSelector, videoSelector, isInsideShadow);
+        if (!result.success) throw new Error(`Overlay click failed: ${result.error}`);
+    }
+
+    async function simulateHiddenOverlayAndMediaEvent(targetPage, videoSelector = 'video') {
+        return await targetPage.evaluate((sel) => {
+            const video = document.querySelector(sel);
+            if (!video) return { error: 'Video not found' };
+
+            const videoRect = video.getBoundingClientRect();
+            const rectDistance = (host) => {
+                const hostRect = host.getBoundingClientRect();
+                return Math.abs(hostRect.left - videoRect.left)
+                    + Math.abs(hostRect.top - videoRect.top)
+                    + Math.abs(hostRect.width - videoRect.width)
+                    + Math.abs(hostRect.height - videoRect.height);
+            };
+
+            const host = Array.from(document.querySelectorAll('.__mc-overlay-host'))
+                .filter(h => h.shadowRoot)
+                .sort((a, b) => rectDistance(a) - rectDistance(b))[0];
+            if (!host) return { error: 'Overlay not found' };
+
+            document.querySelectorAll('.__mc-overlay-host').forEach(h => {
+                h.style.display = 'none';
+            });
+            video.dispatchEvent(new Event('play', { bubbles: true }));
+            return { success: true };
+        }, videoSelector);
+    }
+
+    async function getOverlayVisibility(targetPage, videoSelector = 'video') {
+        return await targetPage.evaluate((sel) => {
+            const video = document.querySelector(sel);
+            if (!video) return { error: 'Video not found' };
+
+            const videoRect = video.getBoundingClientRect();
+            const rectDistance = (host) => {
+                const hostRect = host.getBoundingClientRect();
+                return Math.abs(hostRect.left - videoRect.left)
+                    + Math.abs(hostRect.top - videoRect.top)
+                    + Math.abs(hostRect.width - videoRect.width)
+                    + Math.abs(hostRect.height - videoRect.height);
+            };
+
+            const host = Array.from(document.querySelectorAll('.__mc-overlay-host'))
+                .filter(h => h.shadowRoot)
+                .sort((a, b) => rectDistance(a) - rectDistance(b))[0];
+            if (!host) return { error: 'Overlay not found' };
+
+            const hostRect = host.getBoundingClientRect();
+            return {
+                display: getComputedStyle(host).display,
+                width: hostRect.width,
+                height: hostRect.height
+            };
+        }, videoSelector);
+    }
+
+    let failed = false;
 
     try {
         console.log('\n--- TEST 1: Injection & Shadow DOM Piercing ---');
@@ -86,7 +196,19 @@ server.listen(PORT, async () => {
 
         console.log('\n--- TEST 2: Shadow Video Control ---');
         const shadowState = await getOverlayState(page, '#shadowVideo', true);
+        if (shadowState.error) throw new Error(`Shadow overlay lookup failed: ${shadowState.error}`);
         if (shadowState.speed.includes('1.00x')) console.log('✅ PASS: Overlay active inside Shadow DOM.');
+
+        console.log('\n--- TEST 2B: Overlay Recovery Without Scroll (YouTube-style) ---');
+        const recoverySetup = await simulateHiddenOverlayAndMediaEvent(page, '#video1');
+        if (recoverySetup.error) throw new Error(`Recovery setup failed: ${recoverySetup.error}`);
+        await new Promise(r => setTimeout(r, 700));
+        const recoveredOverlay = await getOverlayVisibility(page, '#video1');
+        if (recoveredOverlay.error) throw new Error(`Recovery check failed: ${recoveredOverlay.error}`);
+        if (recoveredOverlay.display === 'none' || recoveredOverlay.width === 0 || recoveredOverlay.height === 0) {
+            throw new Error('Overlay did not recover after media event without scroll');
+        }
+        console.log('✅ PASS: Overlay recovered without requiring scroll.');
 
         console.log('\n--- TEST 3: Persistence (Tab Mode) ---');
         await page.evaluate(() => {
@@ -96,11 +218,7 @@ server.listen(PORT, async () => {
         });
         await new Promise(r => setTimeout(r, 1000));
 
-        await page.evaluate(() => {
-            const v = document.querySelector('#video1');
-            const host = Array.from(document.querySelectorAll('.__mc-overlay-host')).find(h => h.parentElement === v.parentElement);
-            host.shadowRoot.querySelector('.mc-sbtn-t').click();
-        });
+        await requireOverlayClick(page, '.mc-sbtn-t', '#video1');
         await new Promise(r => setTimeout(r, 1500));
 
         await page.goto(URL2);
@@ -119,9 +237,7 @@ server.listen(PORT, async () => {
         });
         await new Promise(r => setTimeout(r, 1000));
 
-        await page.evaluate(() => {
-            document.querySelector('.__mc-overlay-host').shadowRoot.querySelector('.mc-sbtn-d').click();
-        });
+        await requireOverlayClick(page, '.mc-sbtn-d');
         await new Promise(r => setTimeout(r, 1500));
 
         const page3 = await browser.newPage();
@@ -142,7 +258,7 @@ server.listen(PORT, async () => {
             v.dispatchEvent(new Event('ratechange'));
         });
         await new Promise(r => setTimeout(r, 1000));
-        await page3.evaluate(() => document.querySelector('.__mc-overlay-host').shadowRoot.querySelector('.mc-sbtn-g').click());
+        await requireOverlayClick(page3, '.mc-sbtn-g', '#video1');
         await new Promise(r => setTimeout(r, 1500));
 
         // It should instantly be Global 4.0x
@@ -162,7 +278,7 @@ server.listen(PORT, async () => {
 
         console.log('\n--- TEST 7: Isolation (Tab Preset overriding Global) ---');
         // Lock to Tab mode FIRST so changing speed doesn't pollute the Global preset
-        await page4.evaluate(() => document.querySelector('.__mc-overlay-host').shadowRoot.querySelector('.mc-sbtn-t').click());
+        await requireOverlayClick(page4, '.mc-sbtn-t');
         await new Promise(r => setTimeout(r, 1500));
 
         // Now change speed to 1.5x, this will update only the Tab preset
@@ -179,7 +295,7 @@ server.listen(PORT, async () => {
         console.log('✅ PASS: Tab Isolation verified. Tab preset on page 4 did not affect page 3.');
 
         console.log('\n--- TEST 8: Smart Clear (Fallback to Global) ---');
-        await page4.evaluate(() => document.querySelector('.__mc-overlay-host').shadowRoot.querySelector('.mc-sbtn-c').click());
+        await requireOverlayClick(page4, '.mc-sbtn-c');
         await new Promise(r => setTimeout(r, 1500));
 
         // page4 should fall back to 4.0x
@@ -190,7 +306,7 @@ server.listen(PORT, async () => {
         console.log('\n--- TEST 9: Global vs Domain Isolation (Case A) ---');
         // page3 is currently on Global mode (4.00x) at localhost.
         // Let's set a Domain preset on localhost to 2.5x
-        await page3.evaluate(() => document.querySelector('.__mc-overlay-host').shadowRoot.querySelector('.mc-sbtn-d').click());
+        await requireOverlayClick(page3, '.mc-sbtn-d');
         await new Promise(r => setTimeout(r, 1500));
         await page3.evaluate(() => {
             const v = document.querySelector('video');
@@ -212,7 +328,7 @@ server.listen(PORT, async () => {
 
         console.log('\n--- TEST 10: Multi-layer Smart Clear (Case E) ---');
         // page3 has Global=4.0x, Domain=2.5x. Let's add Tab=1.25x
-        await page3.evaluate(() => document.querySelector('.__mc-overlay-host').shadowRoot.querySelector('.mc-sbtn-t').click());
+        await requireOverlayClick(page3, '.mc-sbtn-t');
         await new Promise(r => setTimeout(r, 1500));
         await page3.evaluate(() => {
             const v = document.querySelector('video');
@@ -222,13 +338,13 @@ server.listen(PORT, async () => {
         await new Promise(r => setTimeout(r, 1500));
 
         // Now clear once -> should fallback to Domain (2.5x)
-        await page3.evaluate(() => document.querySelector('.__mc-overlay-host').shadowRoot.querySelector('.mc-sbtn-c').click());
+        await requireOverlayClick(page3, '.mc-sbtn-c');
         await new Promise(r => setTimeout(r, 2500)); // wait for preset fetch
         let stateP3_Clear1 = await getOverlayState(page3, 'video');
         if (!stateP3_Clear1.speed.includes('2.50x')) throw new Error(`Multi-clear 1 failed. Expected 2.50x, got ${stateP3_Clear1.speed}`);
 
         // Clear twice -> should fallback to Global (4.0x)
-        await page3.evaluate(() => document.querySelector('.__mc-overlay-host').shadowRoot.querySelector('.mc-sbtn-c').click());
+        await requireOverlayClick(page3, '.mc-sbtn-c');
         await new Promise(r => setTimeout(r, 2500)); // wait for preset fetch
         let stateP3_Clear2 = await getOverlayState(page3, 'video');
         if (!stateP3_Clear2.speed.includes('4.00x')) throw new Error(`Multi-clear 2 failed. Expected 4.00x, got ${stateP3_Clear2.speed}`);
@@ -256,7 +372,7 @@ server.listen(PORT, async () => {
         console.log('\n--- TEST 12: Temporary Reset Button (Case H) ---');
         // page3 is currently at 5.0x (Global)
         // Click the reset zone (mc-zone-reset)
-        await page3.evaluate(() => document.querySelector('.__mc-overlay-host').shadowRoot.querySelector('.mc-zone-reset').click());
+        await requireOverlayClick(page3, '.mc-zone-reset');
         await new Promise(r => setTimeout(r, 1500));
 
         let stateP3_Reset = await getOverlayState(page3, 'video');
@@ -274,10 +390,11 @@ server.listen(PORT, async () => {
         console.log('\n🏆 ALL PRODUCTION-READY TESTS PASSED!');
 
     } catch (err) {
+        failed = true;
         console.error(`\n❌ TEST SUITE FAILED: ${err.message}`);
     } finally {
         await browser.close();
         server.close();
-        process.exit();
+        process.exit(failed ? 1 : 0);
     }
 });

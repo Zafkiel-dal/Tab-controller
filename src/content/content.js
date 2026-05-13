@@ -45,19 +45,9 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
 
     // ── Overlay Widget ──────────────────────────────────────────────────
 
-    // Sites where TikTok-style layering blocks normal absolute positioning,
-    // OR where videos live inside Shadow DOMs making container lookup impossible.
-    const FIXED_OVERLAY_HOSTNAMES = [
-        'www.tiktok.com', 'tiktok.com',
-        'www.reddit.com', 'reddit.com', 'old.reddit.com', 'sh.reddit.com',
-        'www.facebook.com', 'facebook.com', 'web.facebook.com',
-        'm.youtube.com'
-    ];
-
-    function needsFixedOverlay() {
-        const host = window.location.hostname;
-        return FIXED_OVERLAY_HOSTNAMES.some(h => host === h || host.endsWith('.' + h));
-    }
+    // All sites use fixed-mode overlays. This breaks out of any stacking context
+    // (TikTok, Instagram, Facebook, Reddit, etc.) without needing a hostname list
+    // that must be manually updated whenever a new site is encountered.
 
     function buildOverlayStyles(fixed) {
         return `
@@ -312,16 +302,11 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
 
         const host = createEl('div', '__mc-overlay-host');
         host.__mcVideo = video; // Store reference to video for cleanup
-        const isFixed = needsFixedOverlay();
-        host.dataset.mcFixed = isFixed ? '1' : '0';
-        if (isFixed) {
-            host.style.cssText = 'position:fixed;top:0;left:0;pointer-events:none;z-index:2147483647;';
-        } else {
-            host.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:2147483647;';
-        }
+        host.dataset.mcFixed = '1';
+        host.style.cssText = 'position:fixed;top:0;left:0;pointer-events:none;z-index:2147483647;';
 
         const shadow = host.attachShadow({ mode: 'open' });//'closed'
-        const styleEl = createEl('style', '', buildOverlayStyles(isFixed));
+        const styleEl = createEl('style', '', buildOverlayStyles(true));
         shadow.appendChild(styleEl);
 
         // ── Badge ──
@@ -814,6 +799,11 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
             } else if (inDom) {
                 // Trigger a re-center after the layout has settled
                 setTimeout(anchorBadgeToTopCenter, 50);
+                // Re-evaluate ALL overlay visibilities now that a new video overlay
+                // has been added. This lets the existing overlays (e.g. IG feed reel)
+                // hide themselves if this new overlay belongs to a larger video
+                // (e.g. the comment-view lightbox reel that just appeared).
+                setTimeout(syncAllOverlayPositions, 150);
             }
         };
         tryAttach();
@@ -864,34 +854,6 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
                 });
                 mo.observe(document.body, { childList: true, subtree: false });
             }
-        } else {
-            // ── Absolute mode: classic container-relative positioning (YouTube, FB, etc.) ──
-            let container = video.closest('.html5-video-player, .ytp-player-content, .x1n2onr6, ._video_wrapper, .video-container, ytd-reel-video-renderer, .bpx-player-video-area, shreddit-player, shreddit-post');
-
-            if (!container) {
-                let curr = video.parentElement;
-                for (let i = 0; i < 4 && curr && curr !== document.body; i++) {
-                    const style = getComputedStyle(curr);
-                    if (style.position !== 'static') {
-                        container = curr;
-                        break;
-                    }
-                    curr = curr.parentElement;
-                }
-            }
-
-            const player = container || video.parentElement;
-            if (!player) return;
-
-            const playerStyle = getComputedStyle(player);
-            if (playerStyle.position === 'static') {
-                player.style.position = 'relative';
-            }
-
-            // host is position:absolute; 100%x100% — fill the player container
-            host.style.width = '100%';
-            host.style.height = '100%';
-            player.appendChild(host);
         }
     }
 
@@ -904,6 +866,25 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
             computedStyle.visibility === 'hidden' ||
             computedStyle.display === 'none' ||
             computedStyle.opacity === '0') {
+            host.style.display = 'none';
+            return;
+        }
+
+        // Only show overlay for the largest visible video on the page.
+        // When Instagram opens the comment lightbox, the feed reel (small, in background)
+        // and the comment-view reel (large, foreground) are both in the DOM and viewport.
+        // Without this check both would show a badge. By hiding any video that has a
+        // strictly larger visible peer, only the foreground/primary video keeps its badge.
+        const myArea = r.width * r.height;
+        const hasLargerPeer = Array.from(document.querySelectorAll('video')).some(v => {
+            if (v === video) return false;
+            const vr = v.getBoundingClientRect();
+            if (vr.width === 0 || vr.height === 0) return false;
+            if (vr.bottom <= 0 || vr.top >= window.innerHeight ||
+                vr.right  <= 0 || vr.left >= window.innerWidth) return false;
+            return (vr.width * vr.height) > myArea;
+        });
+        if (hasLargerPeer) {
             host.style.display = 'none';
             return;
         }
@@ -993,6 +974,32 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
         });
     }
 
+    // Re-run syncFixedHostToVideo for every tracked video overlay.
+    // Called after a new overlay is created so existing overlays can re-check
+    // whether a larger peer has appeared (e.g. IG comment lightbox opening).
+    function syncAllOverlayPositions() {
+        deepQueryMediaAll(document).forEach(media => {
+            if (media.tagName !== 'VIDEO') return;
+            const overlay = state.overlays.get(media);
+            if (overlay) syncFixedHostToVideo(media, overlay.host);
+        });
+    }
+
+    // YouTube and other SPA video players often settle layout asynchronously after
+    // navigation/player hydration. If the first overlay sync happens while the
+    // player reports a transient rect/state, the badge can stay hidden until the
+    // user scrolls. Schedule several cheap re-syncs so the overlay recovers without
+    // requiring a scroll/resize event.
+    function scheduleOverlayPositionSync() {
+        if (typeof requestAnimationFrame === 'function') {
+            requestAnimationFrame(syncAllOverlayPositions);
+            requestAnimationFrame(() => requestAnimationFrame(syncAllOverlayPositions));
+        }
+        setTimeout(syncAllOverlayPositions, 100);
+        setTimeout(syncAllOverlayPositions, 500);
+        setTimeout(syncAllOverlayPositions, 1500);
+    }
+
     // ── Original Logic ──────────────────────────────────────────────────
 
     function applyStateToElement(media) {
@@ -1045,6 +1052,11 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
                         // Removing from hookedMedia would cause the event listeners below
                         // to be bound repeatedly to the same <video> element, causing a memory leak.
                         createOverlayForVideo(media);
+                    } else {
+                        // Already-hooked videos can still move or become visible after SPA
+                        // layout changes (notably YouTube). Keep fixed overlays synced even
+                        // when we skip rebinding listeners.
+                        syncFixedHostToVideo(media, h);
                     }
                 }
             }
@@ -1131,6 +1143,7 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
         if (message.action === 'setVolume') {
             state.currentVolume = message.value;
             hookMediaElements();
+            scheduleOverlayPositionSync();
 
             if (state.gainNode) {
                 resumeAudioContext();
@@ -1211,7 +1224,7 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
                 // Universal Shadow DOM detection:
                 // Check if the node itself has a shadow root or if it's a potential host (custom element)
                 // IMPORTANT: Skip our own overlay host to prevent infinite recursion/redundant scans
-                if (node.nodeType === 1 && !node.classList.contains('__mc-overlay-host') && 
+                if (node.nodeType === 1 && !node.classList.contains('__mc-overlay-host') &&
                     (node.shadowRoot || node.nodeName.includes('-') || SHADOW_HOST_TAGS.has(node.nodeName))) {
                     const tryObserveShadow = (attempts) => {
                         if (node.shadowRoot) {
@@ -1265,6 +1278,7 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
             if (response.speed !== undefined) state.currentSpeed = response.speed / SPEED_SCALE;
             applySpeed();
             applyVolume();
+            scheduleOverlayPositionSync();
 
             // YouTube's player may override playbackRate after our initial set.
             // Re-apply a few times with delays to fight back while the
@@ -1296,7 +1310,11 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
             setTimeout(() => { _initialLoadGuard = false; }, 3000);
 
             // Delay slightly to ensure new elements have settled.
-            setTimeout(fetchAndApplyPreset, 100);
+            setTimeout(() => {
+                hookMediaElements();
+                fetchAndApplyPreset();
+                scheduleOverlayPositionSync();
+            }, 100);
         }
     }).observe(document.body || document.documentElement, { subtree: true, childList: true });
 
@@ -1309,6 +1327,7 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
     document.addEventListener('play', (e) => {
         if (e.target && (e.target.tagName === 'VIDEO' || e.target.tagName === 'AUDIO')) {
             hookMediaElements();
+            scheduleOverlayPositionSync();
         }
     }, { capture: true, passive: true });
 
@@ -1317,6 +1336,7 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
     let periodicScanCount = 0;
     const periodicScan = setInterval(() => {
         hookMediaElements();
+        syncAllOverlayPositions();
         periodicScanCount++;
         if (periodicScanCount >= 12) clearInterval(periodicScan);
     }, 2500);
