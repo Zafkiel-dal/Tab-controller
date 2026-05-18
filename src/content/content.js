@@ -497,15 +497,11 @@ if (typeof window.__mediaControllerInjected === 'undefined') {
         // ── Speed buttons ──
         function stepSpeed(direction) {
             let curr = Math.round(state.currentSpeed * 100);
-            let step = 25;
+            const step = 5; // 0.05x fixed step at all speeds
             if (direction > 0) {
-                if (curr >= 800) step = 100;
-                else if (curr >= 400) step = 50;
-                state.currentSpeed = Math.min(1600, Math.ceil((curr + 1) / step) * step) / 100;
+                state.currentSpeed = Math.min(1600, curr + step) / 100;
             } else {
-                if (curr > 800) step = 100;
-                else if (curr > 400) step = 50;
-                state.currentSpeed = Math.max(25, Math.floor((curr - 1) / step) * step) / 100;
+                state.currentSpeed = Math.max(10, curr - step) / 100;
             }
             applySpeed();
             persistState();

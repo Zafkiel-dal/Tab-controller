@@ -9,48 +9,108 @@
 </head>
 
 <body>
-    <div class="header">
-        <h2>Media Controls</h2>
+    <!-- Header Card -->
+    <div class="header-card">
+        <div class="header-left">
+            <div class="logo-icon-wrapper">
+                <svg class="logo-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M8 5.14v14l11-7-11-7z"/>
+                </svg>
+            </div>
+            <div class="header-text">
+                <h1>Media Booster</h1>
+                <p>Tab Media Control v1.6</p>
+            </div>
+        </div>
         <label class="theme-switch" title="Toggle Dark/Light Mode">
             <input type="checkbox" id="themeToggle" checked>
-            <span class="switch-slider"></span>
+            <span class="switch-slider">
+                <span class="switch-icon switch-sun-icon">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="5"></circle>
+                        <line x1="12" y1="1" x2="12" y2="3"></line>
+                        <line x1="12" y1="21" x2="12" y2="23"></line>
+                        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+                        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+                        <line x1="1" y1="12" x2="3" y2="12"></line>
+                        <line x1="21" y1="12" x2="23" y2="12"></line>
+                        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+                        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+                    </svg>
+                </span>
+            </span>
         </label>
     </div>
 
-    <div class="section">
-        <div class="section-header">
-            <div class="section-title">Volume</div>
-            <div class="value-display" id="volumeValue">100%</div>
+    <!-- Main Controls Grid (Volume & Speed Side-by-Side) -->
+    <div class="controls-grid">
+        <!-- Volume Card -->
+        <div class="section control-card">
+            <div class="card-meta">
+                <div class="card-meta-icon volume-icon-bg">
+                    <svg class="meta-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M11 5L6 9H2v6h4l5 4V5z"/>
+                        <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
+                    </svg>
+                </div>
+                <div class="card-meta-text">
+                    <span class="card-label">Volume</span>
+                    <span class="value-display" id="volumeValue">100%</span>
+                </div>
+            </div>
+            <div class="slider-wrapper">
+                <input type="range" id="volumeSlider" min="0" max="500" value="100">
+                <div class="slider-ranges">
+                    <span>0</span>
+                    <span>500%</span>
+                </div>
+            </div>
+            <div class="controls">
+                <button class="btn-action" id="btnVolReset">Reset</button>
+                <button class="btn-action" id="btnVolMute">Mute</button>
+            </div>
         </div>
-        <div class="slider-wrapper">
-            <input type="range" id="volumeSlider" min="0" max="500" value="100">
-        </div>
-        <div class="controls">
-            <button class="btn-action" id="btnVolReset">Reset</button>
-            <button class="btn-action" id="btnVolMute">Mute</button>
+
+        <!-- Speed Card -->
+        <div class="section control-card">
+            <div class="card-meta">
+                <div class="card-meta-icon speed-icon-bg">
+                    <svg class="meta-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+                    </svg>
+                </div>
+                <div class="card-meta-text">
+                    <span class="card-label">Speed</span>
+                    <span class="value-display" id="speedValue">1.00x</span>
+                </div>
+            </div>
+            <div class="slider-wrapper">
+                <input type="range" id="speedSlider" min="10" max="1600" step="5" value="100">
+                <div class="slider-ranges">
+                    <span>0.10x</span>
+                    <span>16x</span>
+                </div>
+            </div>
+            <div class="controls">
+                <button class="btn-action" id="btnSpeedReset">Normal</button>
+                <button class="btn-action" id="btnSpeedFast">2.00x</button>
+            </div>
         </div>
     </div>
 
-    <div class="section">
-        <div class="section-header">
-            <div class="section-title">Speed</div>
-            <div class="value-display" id="speedValue">1.00x</div>
-        </div>
-        <div class="slider-wrapper">
-            <input type="range" id="speedSlider" min="25" max="1600" step="25" value="100">
-        </div>
-        <div class="controls">
-            <button class="btn-action" id="btnSpeedReset">Normal</button>
-            <button class="btn-action" id="btnSpeedFast">2.00x</button>
-        </div>
-    </div>
-
+    <!-- Save Presets Card -->
     <div class="section section-save">
-        <div class="section-header">
-            <div class="section-title">Save Presets</div>
-            <div id="saveStatusBadge" class="save-badge save-badge--hidden"></div>
+        <div class="save-header">
+            <div class="save-header-left">
+                <span class="save-title-small">PRESET MEMORY</span>
+                <span class="save-title-large">Save Settings</span>
+            </div>
+            <div id="saveStatusBadge" class="save-badge">NO PRESET</div>
         </div>
-        <div id="saveInfo" class="save-info">Select a mode to lock settings.</div>
+        <div class="save-info-banner">
+            <span class="status-dot"></span>
+            <span id="saveInfo" class="save-info">Settings reset to default for new videos.</span>
+        </div>
         <div class="controls">
             <button class="btn-action btn-save" id="btnSaveTab">Tab</button>
             <button class="btn-action btn-save" id="btnSaveDomain">Domain</button>
